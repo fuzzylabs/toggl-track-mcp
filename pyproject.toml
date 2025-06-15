@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "toggl-track-mcp"
+version = "0.1.0"
+description = "Toggl Track MCP server exposing time tracking data as AI tools"
+authors = [{ name = "Fuzzy Labs", email = "tom@fuzzylabs.ai" }]
+license = {text = "MIT"}
+requires-python = ">=3.10"
+readme = "README.md"
+dependencies = [
+    "fastmcp>=2.2.5",
+    "httpx>=0.25",
+    "python-dotenv",
+    "fastapi>=0.68.0",
+    "uvicorn[standard]",
+    "pydantic>=2.0",
+    "asyncio-throttle>=1.0.0"
+]
+
+[project.optional-dependencies]
+dev = ["black", "isort", "pytest", "ruff", "mypy"]
+
+[project.urls]
+Homepage = "https://github.com/fuzzylabs/toggl-track-mcp"
+Repository = "https://github.com/fuzzylabs/toggl-track-mcp.git"
+Issues = "https://github.com/fuzzylabs/toggl-track-mcp/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pyyaml>=6.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "ruff>=0.1.0",
+    "mypy>=1.5.0"
+]
+
+[tool.black]
+line-length = 88
+target-version = ['py310']
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.mypy]
+python_version = "3.10"
+disallow_untyped_defs = true
+disallow_any_generics = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+strict_optional = true
