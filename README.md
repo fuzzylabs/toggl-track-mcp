@@ -34,7 +34,7 @@ This server exposes your Toggl Track time tracking data through the [Model Conte
 ```bash
 git clone https://github.com/fuzzylabs/toggl-track-mcp.git
 cd toggl-track-mcp
-pip install -e .
+uv sync
 ```
 
 ### 3. Configuration
@@ -56,7 +56,7 @@ TOGGL_API_TOKEN=your_api_token_here
 Verify everything works:
 
 ```bash
-python scripts/test_connection.py
+uv run python scripts/test_connection.py
 ```
 
 ### 5. Connect to Claude Desktop
@@ -127,7 +127,7 @@ That's it! 🎉 Restart Claude Desktop and start asking questions about your tim
 
 ### Local Development
 ```bash
-uvicorn toggl_track_mcp.server:app --reload
+uv run uvicorn toggl_track_mcp.server:app --reload
 ```
 Server available at: http://localhost:8000
 
@@ -170,18 +170,18 @@ Click the button above for one-click deployment to Render, or deploy to your pre
 
 ```bash
 # Install with development dependencies
-pip install -e ".[dev]"
+uv sync --extra dev
 
 # Run tests
-pytest
+uv run pytest
 
 # Format and lint
-black toggl_track_mcp/
-isort toggl_track_mcp/
-ruff check toggl_track_mcp/
+uv run black toggl_track_mcp/
+uv run isort toggl_track_mcp/
+uv run ruff check toggl_track_mcp/
 
 # Type checking
-mypy toggl_track_mcp/
+uv run mypy toggl_track_mcp/
 ```
 
 ### Project Structure
@@ -202,13 +202,13 @@ scripts/                 # Utility scripts
 
 ```bash
 # Run all tests with coverage
-pytest --cov=toggl_track_mcp
+uv run pytest --cov=toggl_track_mcp
 
 # Run specific tests
-pytest tests/test_rate_limiter.py -v
+uv run pytest tests/test_rate_limiter.py -v
 
-# Test with multiple Python versions
-tox
+# Test with multiple Python versions (use GitHub Actions)
+# or install and use tox: uv tool install tox && uv tool run tox
 ```
 
 ## Troubleshooting
@@ -225,7 +225,7 @@ tox
 **Problem**: Cannot connect to Toggl API
 
 **Solutions**:
-- Run the connection test: `python scripts/test_connection.py`
+- Run the connection test: `uv run python scripts/test_connection.py`
 - Check your internet connection
 - Verify you can access https://api.track.toggl.com in your browser
 

@@ -35,8 +35,8 @@ This project adheres to a [Code of Conduct](CODE_OF_CONDUCT.md). By participatin
 
 2. **Set up development environment**
    ```bash
-   # Install in development mode
-   pip install -e ".[dev]"
+   # Install in development mode with uv
+   uv sync --extra dev
    
    # Set up pre-commit hooks (optional)
    pre-commit install
@@ -51,19 +51,19 @@ This project adheres to a [Code of Conduct](CODE_OF_CONDUCT.md). By participatin
 
 1. **Code Style**
    - Follow PEP 8 guidelines
-   - Use Black for code formatting: `black toggl_track_mcp/`
-   - Sort imports with isort: `isort toggl_track_mcp/`
-   - Lint with ruff: `ruff check toggl_track_mcp/`
+   - Use Black for code formatting: `uv run black toggl_track_mcp/`
+   - Sort imports with isort: `uv run isort toggl_track_mcp/`
+   - Lint with ruff: `uv run ruff check toggl_track_mcp/`
 
 2. **Type Hints**
    - Add type hints to all functions and methods
-   - Run mypy for type checking: `mypy toggl_track_mcp/`
+   - Run mypy for type checking: `uv run mypy toggl_track_mcp/`
 
 3. **Testing**
    - Write tests for new functionality
    - Maintain or improve test coverage
-   - Run tests: `pytest`
-   - Run with coverage: `pytest --cov=toggl_track_mcp`
+   - Run tests: `uv run pytest`
+   - Run with coverage: `uv run pytest --cov=toggl_track_mcp`
 
 4. **Documentation**
    - Update docstrings for new functions/classes
@@ -105,7 +105,7 @@ pytest -v
 #### Integration Tests
 ```bash
 # Test with real API (requires TOGGL_API_TOKEN)
-python scripts/test_connection.py
+uv run python scripts/test_connection.py
 ```
 
 #### Test Environment Variables
