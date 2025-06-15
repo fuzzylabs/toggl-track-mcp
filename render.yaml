@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: toggl-track-mcp
+    env: python
+    plan: starter
+    buildCommand: pip install -e .
+    startCommand: uvicorn toggl_track_mcp.server:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: TOGGL_API_TOKEN
+        sync: false
+      - key: TOGGL_WORKSPACE_ID
+        sync: false
+      - key: MCP_API_KEY
+        sync: false
+      - key: LOG_LEVEL
+        value: info
+    healthCheckPath: /health
