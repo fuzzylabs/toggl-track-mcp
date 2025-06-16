@@ -25,13 +25,15 @@ class TogglUser(BaseModel):
     image_url: Optional[str] = None
     created_at: str
     updated_at: str
+    
+    model_config = ConfigDict(extra="ignore")
 
 
 class TogglWorkspace(BaseModel):
     """Toggl workspace model."""
 
-    id: int
-    name: str
+    id: Optional[int] = None
+    name: Optional[str] = None
     premium: Optional[bool] = None
     admin: Optional[bool] = None
     default_hourly_rate: Optional[float] = None
@@ -51,11 +53,11 @@ class TogglWorkspace(BaseModel):
 class TogglProject(BaseModel):
     """Toggl project model."""
 
-    id: int
+    id: Optional[int] = None
     wid: Optional[int] = None  # workspace_id in API response
     workspace_id: Optional[int] = None  # Alternative field name
     client_id: Optional[int] = None
-    name: str
+    name: Optional[str] = None
     is_private: Optional[bool] = None
     active: Optional[bool] = None
     at: Optional[str] = None
@@ -74,10 +76,10 @@ class TogglProject(BaseModel):
 class TogglClient(BaseModel):
     """Toggl client model."""
 
-    id: int
+    id: Optional[int] = None
     wid: Optional[int] = None  # workspace_id in API response
     workspace_id: Optional[int] = None  # Alternative field name
-    name: str
+    name: Optional[str] = None
     notes: Optional[str] = None
     at: Optional[str] = None
     # Additional fields that might be present
@@ -89,15 +91,15 @@ class TogglClient(BaseModel):
 class TogglTimeEntry(BaseModel):
     """Toggl time entry model."""
 
-    id: int
+    id: Optional[int] = None
     wid: Optional[int] = None  # workspace_id in API response
     workspace_id: Optional[int] = None  # Alternative field name
     project_id: Optional[int] = None
     task_id: Optional[int] = None
     billable: bool = False
-    start: str
+    start: Optional[str] = None
     stop: Optional[str] = None
-    duration: int
+    duration: Optional[int] = None
     description: str = ""
     tags: Optional[List[str]] = None
     tag_ids: Optional[List[int]] = None
@@ -111,10 +113,10 @@ class TogglTimeEntry(BaseModel):
 class TogglTag(BaseModel):
     """Toggl tag model."""
 
-    id: int
+    id: Optional[int] = None
     wid: Optional[int] = None  # workspace_id in API response
     workspace_id: Optional[int] = None  # Alternative field name
-    name: str
+    name: Optional[str] = None
     at: Optional[str] = None
     
     model_config = ConfigDict(extra="ignore")
