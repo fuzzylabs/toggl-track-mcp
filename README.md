@@ -73,8 +73,9 @@ Add this to your Claude Desktop config file:
         "run",
         "--directory",
         "/path/to/your/toggl-track-mcp",
-        "uvicorn",
-        "toggl_track_mcp.server:app"
+        "python",
+        "-m",
+        "toggl_track_mcp"
       ],
       "env": {
         "TOGGL_API_TOKEN": "your_toggl_api_token_here"
@@ -91,7 +92,7 @@ Add this to your Claude Desktop config file:
 **Copy this Cursor deeplink and paste it in your browser address bar:**
 
 ```
-cursor://anysphere.cursor-deeplink/mcp/install?name=toggl-track&config=eyJ0b2dnbC10cmFjayI6eyJjb21tYW5kIjoidXYiLCJhcmdzIjpbInJ1biIsIi0tZGlyZWN0b3J5IiwiL3BhdGgvdG8veW91ci90b2dnbC10cmFjay1tY3AiLCJweXRob24iLCJ0b2dnbF90cmFja19tY3Avc2VydmVyLnB5Il0sImVudiI6eyJUT0dHTE9fQVBJX1RPS0VOIjoieW91cl90b2dnbF9hcGlfdG9rZW5faGVyZSJ9fX0
+cursor://anysphere.cursor-deeplink/mcp/install?name=toggl-track&config=eyJ0b2dnbC10cmFjayI6eyJjb21tYW5kIjoidXYiLCJhcmdzIjpbInJ1biIsIi0tZGlyZWN0b3J5IiwiL3BhdGgvdG8veW91ci90b2dnbC10cmFjay1tY3AiLCJweXRob24iLCItbSIsInRvZ2dsX3RyYWNrX21jcCJdLCJlbnYiOnsiVE9HR0xfQVBJX1RPS0VOIjoieW91cl90b2dnbF9hcGlfdG9rZW5faGVyZSJ9fX0K
 ```
 
 **💡 How to use:**
@@ -113,8 +114,9 @@ Or manually add this to your Cursor MCP settings:
       "run",
       "--directory",
       "/path/to/your/toggl-track-mcp",
-      "uvicorn",
-      "toggl_track_mcp.server:app"
+      "python",
+      "-m",
+      "toggl_track_mcp"
     ],
     "env": {
       "TOGGL_API_TOKEN": "your_toggl_api_token_here"
