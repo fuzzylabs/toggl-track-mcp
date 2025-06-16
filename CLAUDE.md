@@ -9,6 +9,12 @@ This is a Model Context Protocol (MCP) server that exposes Toggl Track time trac
 1. **stdio mode**: For direct integration with AI assistants like Claude Desktop and Cursor
 2. **HTTP mode**: For remote access via web APIs (deployed on Render)
 
+### API Coverage
+
+- **Time Entries API**: Individual user time tracking data
+- **Reports API**: Team-wide time entries and summaries (admin access required)
+- **Workspace API**: Projects, clients, tags, and user management
+
 ### Core Components
 
 - **`toggl_track_mcp/server.py`**: Main MCP server with FastMCP framework and FastAPI backend
