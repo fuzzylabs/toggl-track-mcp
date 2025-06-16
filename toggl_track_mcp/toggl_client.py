@@ -122,6 +122,58 @@ class TogglTag(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
+class TogglReportTimeEntry(BaseModel):
+    """Toggl Reports API time entry model."""
+    
+    id: Optional[int] = None
+    start: Optional[str] = None
+    end: Optional[str] = None
+    seconds: Optional[int] = None
+    description: Optional[str] = None
+    project: Optional[str] = None
+    project_id: Optional[int] = None
+    project_color: Optional[str] = None
+    project_hex_color: Optional[str] = None
+    client: Optional[str] = None
+    client_id: Optional[int] = None
+    user: Optional[str] = None
+    user_id: Optional[int] = None
+    username: Optional[str] = None
+    email: Optional[str] = None
+    tags: Optional[List[str]] = None
+    billable: Optional[bool] = None
+    billable_amount_in_cents: Optional[int] = None
+    hourly_rate_in_cents: Optional[int] = None
+    currency: Optional[str] = None
+    
+    model_config = ConfigDict(extra="ignore")
+
+
+class TogglReportSummary(BaseModel):
+    """Toggl Reports API summary model."""
+    
+    seconds: Optional[int] = None
+    billable_seconds: Optional[int] = None
+    resolution: Optional[str] = None
+    billable_amount_in_cents: Optional[int] = None
+    
+    model_config = ConfigDict(extra="ignore")
+
+
+class TogglReportsResponse(BaseModel):
+    """Toggl Reports API response model."""
+    
+    time_entries: Optional[List[TogglReportTimeEntry]] = None
+    total_seconds: Optional[int] = None
+    total_billable_seconds: Optional[int] = None
+    total_count: Optional[int] = None
+    per_page: Optional[int] = None
+    next_id: Optional[int] = None
+    summary: Optional[TogglReportSummary] = None
+    
+    model_config = ConfigDict(extra="ignore")
+
+
 class TogglAPIError(Exception):
     """Custom exception for Toggl API errors."""
 
@@ -354,3 +406,160 @@ class TogglAPIClient:
         hours = seconds // 3600
         minutes = (seconds % 3600) // 60
         return f"{hours}h {minutes}m"
+
+    # Reports API Methods (Read-Only Team Access)
+
+    async def get_team_time_entries(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        workspace_id: Optional[int] = None,
+        user_ids: Optional[List[int]] = None,
+        project_ids: Optional[List[int]] = None,
+        client_ids: Optional[List[int]] = None,
+        billable: Optional[bool] = None,
+        description: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        page_size: int = 50,
+    ) -> TogglReportsResponse:
+        """Get team time entries using Reports API.
+        
+        Requires admin access. Returns time entries for all team members.
+        
+        Args:
+            start_date: Start date in YYYY-MM-DD format
+            end_date: End date in YYYY-MM-DD format  
+            workspace_id: Workspace ID (uses default if not provided)
+            user_ids: Filter by specific user IDs
+            project_ids: Filter by specific project IDs
+            client_ids: Filter by specific client IDs
+            billable: Filter by billable status
+            description: Filter by description containing text
+            tags: Filter by tags
+            page_size: Number of entries per page (max 1000)
+        """
+        if not workspace_id:
+            user = await self.get_current_user()
+            workspace_id = self.workspace_id or user.default_workspace_id
+
+        # Build request payload
+        payload = {
+            "start_date": start_date,
+            "end_date": end_date,
+            "page_size": min(page_size, 1000),  # API max is 1000
+        }
+        
+        # Add optional filters
+        if user_ids:
+            payload["user_ids"] = user_ids
+        if project_ids:
+            payload["project_ids"] = project_ids
+        if client_ids:
+            payload["client_ids"] = client_ids
+        if billable is not None:
+            payload["billable"] = billable
+        if description:
+            payload["description"] = description
+        if tags:
+            payload["tag_ids"] = tags
+
+        # Remove None values
+        payload = {k: v for k, v in payload.items() if v is not None}
+
+        # Use Reports API endpoint
+        reports_url = "https://api.track.toggl.com/reports/api/v3"
+        url = f"{reports_url}/workspace/{workspace_id}/search/time_entries"
+        
+        await self.rate_limiter.acquire()
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                url,
+                json=payload,
+                headers={
+                    "Authorization": self.auth_header,
+                    "Content-Type": "application/json",
+                },
+                timeout=30.0,
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                return TogglReportsResponse(**data)
+            else:
+                error_msg = f"Reports API request failed: {response.status_code}"
+                try:
+                    error_data = response.json()
+                    error_msg += f" - {error_data}"
+                except:
+                    error_msg += f" - {response.text}"
+                raise TogglAPIError(error_msg, response.status_code)
+
+    async def get_team_summary(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        workspace_id: Optional[int] = None,
+        user_ids: Optional[List[int]] = None,
+        project_ids: Optional[List[int]] = None,
+        client_ids: Optional[List[int]] = None,
+        billable: Optional[bool] = None,
+        grouping: str = "users",
+    ) -> Dict[str, Any]:
+        """Get team time summary using Reports API.
+        
+        Args:
+            grouping: How to group results ("users", "projects", "clients", "entries")
+            Other args: Same as get_team_time_entries
+        """
+        if not workspace_id:
+            user = await self.get_current_user()
+            workspace_id = self.workspace_id or user.default_workspace_id
+
+        # Build request payload
+        payload = {
+            "start_date": start_date,
+            "end_date": end_date,
+            "grouping": grouping,
+        }
+        
+        # Add optional filters
+        if user_ids:
+            payload["user_ids"] = user_ids
+        if project_ids:
+            payload["project_ids"] = project_ids
+        if client_ids:
+            payload["client_ids"] = client_ids
+        if billable is not None:
+            payload["billable"] = billable
+
+        # Remove None values
+        payload = {k: v for k, v in payload.items() if v is not None}
+
+        # Use Reports API summary endpoint
+        reports_url = "https://api.track.toggl.com/reports/api/v3"
+        url = f"{reports_url}/workspace/{workspace_id}/summary/time_entries"
+        
+        await self.rate_limiter.acquire()
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                url,
+                json=payload,
+                headers={
+                    "Authorization": self.auth_header,
+                    "Content-Type": "application/json",
+                },
+                timeout=30.0,
+            )
+            
+            if response.status_code == 200:
+                return response.json()
+            else:
+                error_msg = f"Reports API summary request failed: {response.status_code}"
+                try:
+                    error_data = response.json()
+                    error_msg += f" - {error_data}"
+                except:
+                    error_msg += f" - {response.text}"
+                raise TogglAPIError(error_msg, response.status_code)
