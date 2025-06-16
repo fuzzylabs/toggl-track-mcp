@@ -491,7 +491,7 @@ class TogglAPIClient:
                 try:
                     error_data = response.json()
                     error_msg += f" - {error_data}"
-                except:
+                except Exception:
                     error_msg += f" - {response.text}"
                 raise TogglAPIError(error_msg, response.status_code)
 
@@ -560,6 +560,6 @@ class TogglAPIClient:
                 try:
                     error_data = response.json()
                     error_msg += f" - {error_data}"
-                except:
+                except Exception:
                     error_msg += f" - {response.text}"
                 raise TogglAPIError(error_msg, response.status_code)
