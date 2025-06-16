@@ -1,6 +1,7 @@
 """Entry point for running Toggl Track MCP server in stdio mode."""
 
 import asyncio
+
 from .server import mcp
 
 
