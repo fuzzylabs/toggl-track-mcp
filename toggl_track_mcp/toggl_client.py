@@ -6,7 +6,7 @@ import logging
 from typing import Any, Dict, List, Optional, Union
 
 import httpx
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from .rate_limiter import TokenBucketRateLimiter
 
@@ -32,15 +32,20 @@ class TogglWorkspace(BaseModel):
 
     id: int
     name: str
-    premium: bool
-    admin: bool
+    premium: Optional[bool] = None
+    admin: Optional[bool] = None
     default_hourly_rate: Optional[float] = None
-    default_currency: str
-    only_admins_may_create_projects: bool
-    only_admins_see_billable_rates: bool
-    projects_billable_by_default: bool
-    api_token: str
-    ical_enabled: bool
+    default_currency: Optional[str] = None
+    only_admins_may_create_projects: Optional[bool] = None
+    only_admins_see_billable_rates: Optional[bool] = None
+    projects_billable_by_default: Optional[bool] = None
+    api_token: Optional[str] = None
+    ical_enabled: Optional[bool] = None
+    # Additional fields that might be present
+    organization_id: Optional[int] = None
+    active_project_count: Optional[int] = None
+    
+    model_config = ConfigDict(extra="ignore")  # Ignore extra fields not defined in model
 
 
 class TogglProject(BaseModel):
