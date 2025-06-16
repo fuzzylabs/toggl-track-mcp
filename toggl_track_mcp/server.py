@@ -2,7 +2,7 @@
 
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
@@ -29,9 +29,7 @@ toggl_client: Optional[TogglAPIClient] = None
 if TOGGL_API_TOKEN:
     workspace_id = int(TOGGL_WORKSPACE_ID) if TOGGL_WORKSPACE_ID else None
     toggl_client = TogglAPIClient(
-        api_token=TOGGL_API_TOKEN,
-        base_url=TOGGL_BASE_URL,
-        workspace_id=workspace_id
+        api_token=TOGGL_API_TOKEN, base_url=TOGGL_BASE_URL, workspace_id=workspace_id
     )
 
 
@@ -46,20 +44,22 @@ def _get_toggl_client() -> TogglAPIClient:
 mcp: FastMCP[None] = FastMCP("Toggl Track MCP")
 
 
-async def authenticate_request(request: Request, call_next):
+async def authenticate_request(
+    request: Request, call_next: Callable[[Request], Awaitable[Any]]
+) -> Any:
     """Authenticate MCP requests if API key is configured."""
     # Skip auth for tests
     if os.getenv("PYTEST_CURRENT_TEST"):
         return await call_next(request)
-    
+
     # Skip auth if no API key configured
     if not MCP_API_KEY:
         return await call_next(request)
-    
+
     # Only authenticate MCP endpoints
     if not request.url.path.startswith("/mcp"):
         return await call_next(request)
-    
+
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Invalid authorization header")
@@ -67,7 +67,7 @@ async def authenticate_request(request: Request, call_next):
     provided_key = auth_header[7:]  # Remove "Bearer " prefix
     if provided_key != MCP_API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API key")
-    
+
     return await call_next(request)
 
 
@@ -96,16 +96,18 @@ async def get_current_time_entry() -> Dict[str, Any]:
         entry = await client.get_current_time_entry()
         if not entry:
             return {"message": "No time entry is currently running"}
-        
+
         duration = client.calculate_duration(entry)
         duration_formatted = client.format_duration(duration)
-        
+
         result = entry.model_dump()
-        result.update({
-            "calculated_duration": duration,
-            "duration_formatted": duration_formatted,
-            "is_running": entry.duration < 0
-        })
+        result.update(
+            {
+                "calculated_duration": duration,
+                "duration_formatted": duration_formatted,
+                "is_running": entry.duration < 0,
+            }
+        )
 
         return {
             "time_entry": result,
@@ -135,7 +137,7 @@ async def list_time_entries(
     try:
         client = _get_toggl_client()
         entries = await client.get_time_entries(start_date, end_date)
-        
+
         # Apply additional filters
         filtered_entries = []
         for entry in entries:
@@ -152,16 +154,18 @@ async def list_time_entries(
             # Calculate actual duration
             duration = client.calculate_duration(entry)
             entry_data = entry.model_dump()
-            entry_data.update({
-                "calculated_duration": duration,
-                "duration_formatted": client.format_duration(duration),
-                "is_running": entry.duration < 0
-            })
+            entry_data.update(
+                {
+                    "calculated_duration": duration,
+                    "duration_formatted": client.format_duration(duration),
+                    "is_running": entry.duration < 0,
+                }
+            )
             filtered_entries.append(entry_data)
 
         total_duration = sum(e["calculated_duration"] for e in filtered_entries)
         total_formatted = client.format_duration(total_duration)
-        
+
         return {
             "time_entries": filtered_entries,
             "total_count": len(filtered_entries),
@@ -190,14 +194,16 @@ async def get_time_entry_details(entry_id: int) -> Dict[str, Any]:
         client = _get_toggl_client()
         entry = await client.get_time_entry(entry_id)
         duration = client.calculate_duration(entry)
-        
+
         result = entry.model_dump()
-        result.update({
-            "calculated_duration": duration,
-            "duration_formatted": client.format_duration(duration),
-            "is_running": entry.duration < 0
-        })
-        
+        result.update(
+            {
+                "calculated_duration": duration,
+                "duration_formatted": client.format_duration(duration),
+                "is_running": entry.duration < 0,
+            }
+        )
+
         return {"time_entry": result}
     except TogglAPIError as e:
         return {"error": str(e)}
@@ -209,7 +215,7 @@ async def list_projects() -> Dict[str, Any]:
     try:
         client = _get_toggl_client()
         projects = await client.get_projects()
-        
+
         active_projects = [p for p in projects if p.active]
         inactive_projects = [p for p in projects if not p.active]
 
@@ -230,7 +236,7 @@ async def list_clients() -> Dict[str, Any]:
     try:
         client = _get_toggl_client()
         clients = await client.get_clients()
-        
+
         return {
             "clients": [c.model_dump() for c in clients],
             "total_count": len(clients),
@@ -246,7 +252,7 @@ async def list_workspaces() -> Dict[str, Any]:
     try:
         client = _get_toggl_client()
         workspaces = await client.get_workspaces()
-        
+
         return {
             "workspaces": [w.model_dump() for w in workspaces],
             "total_count": len(workspaces),
@@ -262,7 +268,7 @@ async def list_tags() -> Dict[str, Any]:
     try:
         client = _get_toggl_client()
         tags = await client.get_tags()
-        
+
         return {
             "tags": [t.model_dump() for t in tags],
             "total_count": len(tags),
@@ -292,7 +298,7 @@ async def search_time_entries(
     try:
         client = _get_toggl_client()
         entries = await client.get_time_entries(start_date, end_date)
-        
+
         # Search and filter
         matching_entries = []
         query_lower = query.lower()
@@ -318,17 +324,19 @@ async def search_time_entries(
             # Calculate duration
             duration = client.calculate_duration(entry)
             entry_data = entry.model_dump()
-            entry_data.update({
-                "calculated_duration": duration,
-                "duration_formatted": client.format_duration(duration),
-                "is_running": entry.duration < 0,
-                "match_reason": "description" if description_match else "tags"
-            })
+            entry_data.update(
+                {
+                    "calculated_duration": duration,
+                    "duration_formatted": client.format_duration(duration),
+                    "is_running": entry.duration < 0,
+                    "match_reason": "description" if description_match else "tags",
+                }
+            )
             matching_entries.append(entry_data)
 
         total_duration = sum(e["calculated_duration"] for e in matching_entries)
         total_formatted = client.format_duration(total_duration)
-        
+
         return {
             "query": query,
             "time_entries": matching_entries,
@@ -364,7 +372,7 @@ async def get_time_summary(
         entries = await client.get_time_entries(start_date, end_date)
         projects = await client.get_projects()
         clients = await client.get_clients()
-        
+
         # Create lookup maps
         project_map = {p.id: p for p in projects}
         client_map = {c.id: c for c in clients}
@@ -441,7 +449,7 @@ async def get_time_summary(
                     "name": name,
                     "duration": data["duration"],
                     "duration_formatted": client.format_duration(data["duration"]),
-                    "entries_count": data["count"]
+                    "entries_count": data["count"],
                 }
                 for name, data in sorted(
                     breakdown_dict.items(), key=lambda x: x[1]["duration"], reverse=True
@@ -453,10 +461,14 @@ async def get_time_summary(
                 "total_duration": total_duration,
                 "total_duration_formatted": client.format_duration(total_duration),
                 "billable_duration": billable_duration,
-                "billable_duration_formatted": client.format_duration(billable_duration),
+                "billable_duration_formatted": client.format_duration(
+                    billable_duration
+                ),
                 "non_billable_duration": total_duration - billable_duration,
-                "non_billable_duration_formatted": client.format_duration(total_duration - billable_duration),
-                "total_entries": len(filtered_entries)
+                "non_billable_duration_formatted": client.format_duration(
+                    total_duration - billable_duration
+                ),
+                "total_entries": len(filtered_entries),
             },
             "project_breakdown": format_breakdown(project_breakdown),
             "client_breakdown": format_breakdown(client_breakdown),
@@ -468,7 +480,7 @@ async def get_time_summary(
                 "client_id": client_id,
                 "billable": billable,
             },
-            "period_summary": f"Total time: {client.format_duration(total_duration)} ({len(filtered_entries)} entries)"
+            "period_summary": f"Total time: {client.format_duration(total_duration)} ({len(filtered_entries)} entries)",
         }
     except TogglAPIError as e:
         return {"error": str(e)}
@@ -485,10 +497,10 @@ def create_app() -> FastAPI:
 
     # Add authentication middleware
     app.middleware("http")(authenticate_request)
-    
+
     # Mount MCP
-    app.mount("/mcp", mcp.http_app)
-    
+    app.mount("/mcp", mcp.http_app)  # type: ignore
+
     @app.get("/")
     async def root() -> RedirectResponse:
         """Redirect to MCP endpoint."""
