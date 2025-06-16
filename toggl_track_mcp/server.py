@@ -501,9 +501,9 @@ async def get_team_time_entries(
     page_size: int = 50,
 ) -> Dict[str, Any]:
     """Get time entries for all team members (requires admin access).
-    
+
     Uses Toggl Reports API to retrieve time entries across your entire team.
-    
+
     Args:
         start_date: Start date in YYYY-MM-DD format
         end_date: End date in YYYY-MM-DD format
@@ -516,20 +516,26 @@ async def get_team_time_entries(
     """
     try:
         client = _get_toggl_client()
-        
+
         # Parse comma-separated IDs
         user_id_list = None
         if user_ids:
-            user_id_list = [int(x.strip()) for x in user_ids.split(",") if x.strip().isdigit()]
-            
+            user_id_list = [
+                int(x.strip()) for x in user_ids.split(",") if x.strip().isdigit()
+            ]
+
         project_id_list = None
         if project_ids:
-            project_id_list = [int(x.strip()) for x in project_ids.split(",") if x.strip().isdigit()]
-            
+            project_id_list = [
+                int(x.strip()) for x in project_ids.split(",") if x.strip().isdigit()
+            ]
+
         client_id_list = None
         if client_ids:
-            client_id_list = [int(x.strip()) for x in client_ids.split(",") if x.strip().isdigit()]
-        
+            client_id_list = [
+                int(x.strip()) for x in client_ids.split(",") if x.strip().isdigit()
+            ]
+
         response = await client.get_team_time_entries(
             start_date=start_date,
             end_date=end_date,
@@ -540,7 +546,7 @@ async def get_team_time_entries(
             description=description,
             page_size=page_size,
         )
-        
+
         # Format the response
         result = {
             "time_entries": [],
@@ -548,15 +554,19 @@ async def get_team_time_entries(
                 "total_entries": response.total_count or 0,
                 "total_seconds": response.total_seconds or 0,
                 "total_billable_seconds": response.total_billable_seconds or 0,
-                "total_duration_formatted": client.format_duration(response.total_seconds or 0),
-                "billable_duration_formatted": client.format_duration(response.total_billable_seconds or 0),
+                "total_duration_formatted": client.format_duration(
+                    response.total_seconds or 0
+                ),
+                "billable_duration_formatted": client.format_duration(
+                    response.total_billable_seconds or 0
+                ),
             },
             "pagination": {
                 "per_page": response.per_page or page_size,
                 "next_id": response.next_id,
             },
         }
-        
+
         # Format time entries
         if response.time_entries:
             for entry in response.time_entries:
@@ -581,14 +591,16 @@ async def get_team_time_entries(
                     "tags": entry.tags or [],
                 }
                 result["time_entries"].append(formatted_entry)
-        
+
         # Add summary message
         total_hours = (response.total_seconds or 0) // 3600
         billable_hours = (response.total_billable_seconds or 0) // 3600
-        result["message"] = f"Found {response.total_count or 0} team time entries. Total: {total_hours}h, Billable: {billable_hours}h"
-        
+        result["message"] = (
+            f"Found {response.total_count or 0} team time entries. Total: {total_hours}h, Billable: {billable_hours}h"
+        )
+
         return result
-        
+
     except TogglAPIError as e:
         return {"error": str(e)}
 
@@ -604,7 +616,7 @@ async def get_team_summary(
     grouping: str = "users",
 ) -> Dict[str, Any]:
     """Get team time summary grouped by users, projects, or clients (requires admin access).
-    
+
     Args:
         start_date: Start date in YYYY-MM-DD format
         end_date: End date in YYYY-MM-DD format
@@ -616,20 +628,26 @@ async def get_team_summary(
     """
     try:
         client = _get_toggl_client()
-        
+
         # Parse comma-separated IDs
         user_id_list = None
         if user_ids:
-            user_id_list = [int(x.strip()) for x in user_ids.split(",") if x.strip().isdigit()]
-            
+            user_id_list = [
+                int(x.strip()) for x in user_ids.split(",") if x.strip().isdigit()
+            ]
+
         project_id_list = None
         if project_ids:
-            project_id_list = [int(x.strip()) for x in project_ids.split(",") if x.strip().isdigit()]
-            
+            project_id_list = [
+                int(x.strip()) for x in project_ids.split(",") if x.strip().isdigit()
+            ]
+
         client_id_list = None
         if client_ids:
-            client_id_list = [int(x.strip()) for x in client_ids.split(",") if x.strip().isdigit()]
-        
+            client_id_list = [
+                int(x.strip()) for x in client_ids.split(",") if x.strip().isdigit()
+            ]
+
         summary_data = await client.get_team_summary(
             start_date=start_date,
             end_date=end_date,
@@ -639,27 +657,35 @@ async def get_team_summary(
             billable=billable,
             grouping=grouping,
         )
-        
+
         # Add formatted durations to the response
         if "groups" in summary_data:
             for group in summary_data.get("groups", []):
                 if "seconds" in group:
-                    group["duration_formatted"] = client.format_duration(group["seconds"])
+                    group["duration_formatted"] = client.format_duration(
+                        group["seconds"]
+                    )
                 if "billable_seconds" in group:
-                    group["billable_duration_formatted"] = client.format_duration(group["billable_seconds"])
-        
+                    group["billable_duration_formatted"] = client.format_duration(
+                        group["billable_seconds"]
+                    )
+
         # Add overall summary
         if "total_seconds" in summary_data:
-            summary_data["total_duration_formatted"] = client.format_duration(summary_data["total_seconds"])
+            summary_data["total_duration_formatted"] = client.format_duration(
+                summary_data["total_seconds"]
+            )
         if "total_billable_seconds" in summary_data:
-            summary_data["total_billable_duration_formatted"] = client.format_duration(summary_data["total_billable_seconds"])
-        
+            summary_data["total_billable_duration_formatted"] = client.format_duration(
+                summary_data["total_billable_seconds"]
+            )
+
         return {
             "summary": summary_data,
             "grouping": grouping,
             "message": f"Team summary grouped by {grouping} for {start_date or 'all time'} to {end_date or 'now'}",
         }
-        
+
     except TogglAPIError as e:
         return {"error": str(e)}
 
@@ -667,36 +693,38 @@ async def get_team_summary(
 @mcp.tool()
 async def list_workspace_users() -> Dict[str, Any]:
     """List all users in the current workspace (requires admin access).
-    
+
     Useful for getting user IDs to filter team reports.
     """
     try:
         client = _get_toggl_client()
-        
+
         # Get current user to determine workspace
         user = await client.get_current_user()
         workspace_id = client.workspace_id or user.default_workspace_id
-        
+
         # Get workspace users
         data = await client._make_request("GET", f"/workspaces/{workspace_id}/users")
-        
+
         users = []
         for user_data in data:
-            users.append({
-                "id": user_data.get("id"),
-                "name": user_data.get("fullname") or user_data.get("name"),
-                "email": user_data.get("email"),
-                "active": user_data.get("active", True),
-                "admin": user_data.get("admin", False),
-            })
-        
+            users.append(
+                {
+                    "id": user_data.get("id"),
+                    "name": user_data.get("fullname") or user_data.get("name"),
+                    "email": user_data.get("email"),
+                    "active": user_data.get("active", True),
+                    "admin": user_data.get("admin", False),
+                }
+            )
+
         return {
             "users": users,
             "total_count": len(users),
             "workspace_id": workspace_id,
             "message": f"Found {len(users)} users in workspace {workspace_id}",
         }
-        
+
     except TogglAPIError as e:
         return {"error": str(e)}
 

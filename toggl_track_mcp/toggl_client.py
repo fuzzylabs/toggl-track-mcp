@@ -25,7 +25,7 @@ class TogglUser(BaseModel):
     image_url: Optional[str] = None
     created_at: str
     updated_at: str
-    
+
     model_config = ConfigDict(extra="ignore")
 
 
@@ -46,8 +46,10 @@ class TogglWorkspace(BaseModel):
     # Additional fields that might be present
     organization_id: Optional[int] = None
     active_project_count: Optional[int] = None
-    
-    model_config = ConfigDict(extra="ignore")  # Ignore extra fields not defined in model
+
+    model_config = ConfigDict(
+        extra="ignore"
+    )  # Ignore extra fields not defined in model
 
 
 class TogglProject(BaseModel):
@@ -69,7 +71,7 @@ class TogglProject(BaseModel):
     currency: Optional[str] = None
     recurring: bool = False
     actual_hours: Optional[int] = None
-    
+
     model_config = ConfigDict(extra="ignore")
 
 
@@ -84,8 +86,10 @@ class TogglClient(BaseModel):
     at: Optional[str] = None
     # Additional fields that might be present
     total_count: Optional[int] = None
-    
-    model_config = ConfigDict(extra="ignore")  # Ignore extra fields not defined in model
+
+    model_config = ConfigDict(
+        extra="ignore"
+    )  # Ignore extra fields not defined in model
 
 
 class TogglTimeEntry(BaseModel):
@@ -106,7 +110,7 @@ class TogglTimeEntry(BaseModel):
     duronly: bool = False
     at: Optional[str] = None
     user_id: Optional[int] = None
-    
+
     model_config = ConfigDict(extra="ignore")
 
 
@@ -118,13 +122,13 @@ class TogglTag(BaseModel):
     workspace_id: Optional[int] = None  # Alternative field name
     name: Optional[str] = None
     at: Optional[str] = None
-    
+
     model_config = ConfigDict(extra="ignore")
 
 
 class TogglReportTimeEntry(BaseModel):
     """Toggl Reports API time entry model."""
-    
+
     id: Optional[int] = None
     start: Optional[str] = None
     end: Optional[str] = None
@@ -145,24 +149,24 @@ class TogglReportTimeEntry(BaseModel):
     billable_amount_in_cents: Optional[int] = None
     hourly_rate_in_cents: Optional[int] = None
     currency: Optional[str] = None
-    
+
     model_config = ConfigDict(extra="ignore")
 
 
 class TogglReportSummary(BaseModel):
     """Toggl Reports API summary model."""
-    
+
     seconds: Optional[int] = None
     billable_seconds: Optional[int] = None
     resolution: Optional[str] = None
     billable_amount_in_cents: Optional[int] = None
-    
+
     model_config = ConfigDict(extra="ignore")
 
 
 class TogglReportsResponse(BaseModel):
     """Toggl Reports API response model."""
-    
+
     time_entries: Optional[List[TogglReportTimeEntry]] = None
     total_seconds: Optional[int] = None
     total_billable_seconds: Optional[int] = None
@@ -170,7 +174,7 @@ class TogglReportsResponse(BaseModel):
     per_page: Optional[int] = None
     next_id: Optional[int] = None
     summary: Optional[TogglReportSummary] = None
-    
+
     model_config = ConfigDict(extra="ignore")
 
 
@@ -423,12 +427,12 @@ class TogglAPIClient:
         page_size: int = 50,
     ) -> TogglReportsResponse:
         """Get team time entries using Reports API.
-        
+
         Requires admin access. Returns time entries for all team members.
-        
+
         Args:
             start_date: Start date in YYYY-MM-DD format
-            end_date: End date in YYYY-MM-DD format  
+            end_date: End date in YYYY-MM-DD format
             workspace_id: Workspace ID (uses default if not provided)
             user_ids: Filter by specific user IDs
             project_ids: Filter by specific project IDs
@@ -448,7 +452,7 @@ class TogglAPIClient:
             "end_date": end_date,
             "page_size": min(page_size, 1000),  # API max is 1000
         }
-        
+
         # Add optional filters
         if user_ids:
             payload["user_ids"] = user_ids
@@ -469,9 +473,9 @@ class TogglAPIClient:
         # Use Reports API endpoint
         reports_url = "https://api.track.toggl.com/reports/api/v3"
         url = f"{reports_url}/workspace/{workspace_id}/search/time_entries"
-        
+
         await self.rate_limiter.acquire()
-        
+
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 url,
@@ -482,7 +486,7 @@ class TogglAPIClient:
                 },
                 timeout=30.0,
             )
-            
+
             if response.status_code == 200:
                 data = response.json()
                 return TogglReportsResponse(**data)
@@ -507,7 +511,7 @@ class TogglAPIClient:
         grouping: str = "users",
     ) -> Dict[str, Any]:
         """Get team time summary using Reports API.
-        
+
         Args:
             grouping: How to group results ("users", "projects", "clients", "entries")
             Other args: Same as get_team_time_entries
@@ -522,7 +526,7 @@ class TogglAPIClient:
             "end_date": end_date,
             "grouping": grouping,
         }
-        
+
         # Add optional filters
         if user_ids:
             payload["user_ids"] = user_ids
@@ -539,9 +543,9 @@ class TogglAPIClient:
         # Use Reports API summary endpoint
         reports_url = "https://api.track.toggl.com/reports/api/v3"
         url = f"{reports_url}/workspace/{workspace_id}/summary/time_entries"
-        
+
         await self.rate_limiter.acquire()
-        
+
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 url,
@@ -552,11 +556,13 @@ class TogglAPIClient:
                 },
                 timeout=30.0,
             )
-            
+
             if response.status_code == 200:
                 return response.json()
             else:
-                error_msg = f"Reports API summary request failed: {response.status_code}"
+                error_msg = (
+                    f"Reports API summary request failed: {response.status_code}"
+                )
                 try:
                     error_data = response.json()
                     error_msg += f" - {error_data}"
