@@ -1,292 +1,353 @@
 # Toggl Track MCP Server
 
-Connect your Toggl Track time tracking data to AI assistants via the Model Context Protocol (MCP).
+> **Connect your Toggl Track time tracking data to AI assistants** — Access time entries, projects, clients, and analytics through natural language queries, with complete read-only security.
 
-[![Python](https://img.shields.io/badge/Python-3.10+-green.svg)](https://python.org)
-[![MCP](https://img.shields.io/badge/MCP-Compatible-blue.svg)](https://modelcontextprotocol.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.68+-red.svg)](https://fastapi.tiangolo.com)
-[![Test](https://github.com/fuzzylabs/toggl-track-mcp/actions/workflows/test.yml/badge.svg)](https://github.com/fuzzylabs/toggl-track-mcp/actions/workflows/test.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Model Context Protocol](https://img.shields.io/badge/MCP-Compatible-blue)](https://modelcontextprotocol.io) [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-green)](https://python.org) [![Toggl Track API v9](https://img.shields.io/badge/Toggl%20Track-API%20v9-red)](https://developers.track.toggl.com)
 
-> **⚠️ Read-Only Access**: This server only reads your Toggl Track data. It cannot create, modify, or delete any time entries, projects, or other data.
+**🚨 Disclaimer**: This project is created by [Fuzzy Labs](https://fuzzylabs.ai) with good vibes and is not officially supported by Toggl Track. Use at your own discretion.
 
 ## What This Does
 
-This server exposes your Toggl Track time tracking data through the [Model Context Protocol](https://modelcontextprotocol.org), allowing AI assistants like Claude to help you analyze your time tracking patterns, generate reports, and answer questions about your work habits.
+Transform how you work with your Toggl Track time tracking data by asking AI assistants natural language questions like:
 
-**Example queries you can ask:**
 - *"How much time did I spend on client work last week?"*
-- *"Show me my most productive day this month"*
-- *"What projects am I spending the most time on?"*
+- *"What's my most productive day this month?"* 
+- *"Show me all time entries tagged with 'meeting'"*
+- *"Which project am I spending the most time on?"*
 - *"Generate a time summary for the Marketing project"*
-- *"Find all time entries tagged with 'meeting'"*
+
+**🔒 Read-Only & Secure** — No write access to your time tracking data  
+**🚀 Instant Setup** — Works with any MCP-compatible AI assistant  
+**📊 Complete Coverage** — Access time entries, projects, clients, analytics & more
 
 ## Quick Start
 
 ### 1. Get Your Toggl Track API Token
+1. Log into your Toggl Track account
+2. Go to **Profile Settings → API Token**
+3. Copy your API token (keep it safe!)
 
-1. Visit your [Toggl Track Profile Settings](https://track.toggl.com/profile)
-2. Scroll down to find your **API Token**
-3. Copy the token (you'll need it for configuration)
+### 2. Install & Configure
 
-### 2. Installation
+#### macOS Setup
 
 ```bash
+# Install uv (Python package manager)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Clone and install
 git clone https://github.com/fuzzylabs/toggl-track-mcp.git
 cd toggl-track-mcp
 uv sync
 ```
 
-### 3. Configuration
-
-Create a `.env` file:
+#### Linux/Windows Setup
 
 ```bash
-cp .env.example .env
+# Install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh  # Linux/macOS
+# OR for Windows: powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# Clone and install
+git clone https://github.com/fuzzylabs/toggl-track-mcp.git
+cd toggl-track-mcp
+uv sync
 ```
 
-Add your API token to `.env`:
+### 3. Connect to Your AI Assistant
 
-```env
-TOGGL_API_TOKEN=your_api_token_here
-```
+#### Claude Desktop
 
-### 4. Test Your Setup
+Add this to your Claude Desktop config file:
 
-Verify everything works:
-
-```bash
-uv run python scripts/test_connection.py
-```
-
-### 5. Connect to Claude Desktop
-
-Add this to your Claude Desktop configuration:
-
-**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`  
-**Windows**: `%APPDATA%/Claude/claude_desktop_config.json`
-
-```json
-{
-  "mcpServers": {
-    "toggl-track": {
-      "command": "uvicorn",
-      "args": [
-        "toggl_track_mcp.server:app",
-        "--host", "127.0.0.1",
-        "--port", "8000"
-      ],
-      "env": {
-        "TOGGL_API_TOKEN": "your_api_token_here"
-      }
-    }
-  }
-}
-```
-
-That's it! 🎉 Restart Claude Desktop and start asking questions about your time tracking data.
-
-## What You Can Access
-
-| **Data Type** | **Description** | **Example Use Cases** |
-|---------------|-----------------|----------------------|
-| **Current User** | Your profile and account information | Check timezone, workspace details |
-| **Time Entries** | All your time tracking records | Analyze work patterns, find specific entries |
-| **Running Timer** | Currently active time tracking | Check what you're working on now |
-| **Projects** | All your projects with details | Project time analysis, budget tracking |
-| **Clients** | Client information and relationships | Client-specific time reports |
-| **Workspaces** | Your available workspaces | Multi-workspace time analysis |
-| **Tags** | All tags used in time entries | Tag-based filtering and categorization |
-| **Time Summaries** | Aggregated time data with breakdowns | Detailed reporting and analytics |
-
-## Advanced Features
-
-### 🔍 Smart Search & Filtering
-- Search time entries by description or tags
-- Filter by date ranges, projects, clients, or billable status
-- Find patterns in your work habits
-
-### 📊 Time Analytics
-- Automatic duration calculations for running timers
-- Billable vs non-billable time breakdowns
-- Project and client time summaries
-- Tag-based time categorization
-
-### 🛡️ Rate Limiting & Error Handling
-- Respects Toggl's API limits (1 request/second)
-- Graceful handling of API errors and edge cases
-- Automatic retries for rate limit scenarios
-
-### 🔧 Developer-Friendly
-- FastAPI backend with automatic API documentation
-- Health checks and monitoring endpoints
-- Comprehensive test coverage
-- Full type safety with Pydantic models
-
-## Deployment Options
-
-### Local Development
-```bash
-uv run uvicorn toggl_track_mcp.server:app --reload
-```
-Server available at: http://localhost:8000
-
-### Using uv (Recommended)
-If you have [uv](https://docs.astral.sh/uv/) installed:
+**Config Location:**
+- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows:** `%APPDATA%/Claude/claude_desktop_config.json`
 
 ```json
 {
   "mcpServers": {
     "toggl-track": {
       "command": "uv",
-      "args": ["run", "uvicorn", "toggl_track_mcp.server:app"],
+      "args": [
+        "run",
+        "--directory",
+        "/path/to/your/toggl-track-mcp",
+        "uvicorn",
+        "toggl_track_mcp.server:app"
+      ],
       "env": {
-        "TOGGL_API_TOKEN": "your_api_token_here"
+        "TOGGL_API_TOKEN": "your_toggl_api_token_here"
       }
     }
   }
 }
 ```
 
-### Production Deployment
-```bash
-# With Gunicorn
-gunicorn toggl_track_mcp.server:app -w 4 -k uvicorn.workers.UvicornWorker
+#### Cursor
 
-# With Docker
-docker build -t toggl-track-mcp .
-docker run -p 8000:8000 -e TOGGL_API_TOKEN=your_token toggl-track-mcp
-```
+**📋 Quick Setup:** 
 
-### Cloud Deployment
-
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/fuzzylabs/toggl-track-mcp)
-
-Click the button above for one-click deployment to Render, or deploy to your preferred cloud platform.
-
-## Development
-
-### Setup Development Environment
-
-```bash
-# Install with development dependencies
-uv sync --extra dev
-
-# Run tests
-uv run pytest
-
-# Format and lint
-uv run black toggl_track_mcp/
-uv run isort toggl_track_mcp/
-uv run ruff check toggl_track_mcp/
-
-# Type checking
-uv run mypy toggl_track_mcp/
-```
-
-### Project Structure
+**Copy this Cursor deeplink and paste it in your browser address bar:**
 
 ```
-toggl_track_mcp/
-├── __init__.py           # Package exports
-├── server.py            # FastAPI/MCP server
-├── toggl_client.py      # Toggl API client
-└── rate_limiter.py      # Rate limiting utilities
-
-tests/                   # Test suite
-scripts/                 # Utility scripts
-.github/workflows/       # CI/CD automation
+cursor://anysphere.cursor-deeplink/mcp/install?name=toggl-track&config=eyJ0b2dnbC10cmFjayI6eyJjb21tYW5kIjoidXYiLCJhcmdzIjpbInJ1biIsIi0tZGlyZWN0b3J5IiwiL3BhdGgvdG8veW91ci90b2dnbC10cmFjay1tY3AiLCJweXRob24iLCJ0b2dnbF90cmFja19tY3Avc2VydmVyLnB5Il0sImVudiI6eyJUT0dHTE9fQVBJX1RPS0VOIjoieW91cl90b2dnbF9hcGlfdG9rZW5faGVyZSJ9fX0
 ```
 
-### Running the Test Suite
+**💡 How to use:**
+1. Copy the entire `cursor://` URL above
+2. Paste it into your browser's address bar 
+3. Press Enter - this will open Cursor and prompt to install the MCP server
 
-```bash
-# Run all tests with coverage
-uv run pytest --cov=toggl_track_mcp
+**Note:** After clicking the button, you'll need to:
+1. Update the path `/path/to/your/toggl-track-mcp` to your actual installation directory
+2. Replace `your_toggl_api_token_here` with your actual Toggl Track API token
 
-# Run specific tests
-uv run pytest tests/test_rate_limiter.py -v
+Or manually add this to your Cursor MCP settings:
 
-# Test with multiple Python versions (use GitHub Actions)
-# or install and use tox: uv tool install tox && uv tool run tox
+```json
+{
+  "toggl-track": {
+    "command": "uv",
+    "args": [
+      "run",
+      "--directory",
+      "/path/to/your/toggl-track-mcp",
+      "uvicorn",
+      "toggl_track_mcp.server:app"
+    ],
+    "env": {
+      "TOGGL_API_TOKEN": "your_toggl_api_token_here"
+    }
+  }
+}
 ```
+
+#### Other MCP Clients
+
+This server is compatible with any MCP client. Refer to your client's documentation for MCP server configuration.
+
+**💡 Setup Help:**
+- **Using uv (recommended):** Use `uv run` command as shown above - no Python path needed!
+- **uv path for Claude Desktop:** Use full path `~/.local/bin/uv` (find yours with `which uv`)
+- **Manual Python paths (if not using uv):**
+  - **macOS (Homebrew):** `/opt/homebrew/bin/python3` (Apple Silicon) or `/usr/local/bin/python3` (Intel)
+  - **macOS (System):** `/usr/bin/python3` (if available)
+  - **Find your Python:** Run `which python3` in terminal
+  - **Windows:** Try `C:\Python311\python.exe`
+
+### 4. Start Using
+
+1. **Restart your AI assistant**
+2. **Start asking questions!**
+
+Try these example queries:
+> *"Show me my current time entry"*  
+> *"How much time did I log yesterday?"*  
+> *"What projects am I working on?"*  
+> *"Generate a weekly time report"*
+
+## What You Can Access
+
+This MCP server provides **complete read-only access** to your Toggl Track data:
+
+| **Data Type** | **What You Can Do** |
+|---------------|-------------------|
+| **👤 User Info** | View profile, workspace, timezone settings |
+| **⏱️ Current Timer** | Check running time entry, duration, description |
+| **📊 Time Entries** | List, search, filter by date, project, tags |
+| **📂 Projects** | View project details, status, client assignments |
+| **👥 Clients** | Access client information and relationships |
+| **🏢 Workspaces** | View available workspaces and permissions |
+| **🏷️ Tags** | Browse all tags for categorization |
+| **📈 Analytics** | Generate time summaries, breakdowns, reports |
 
 ## Troubleshooting
 
-### 🔑 Authentication Issues
-**Problem**: Getting 401 Unauthorized errors
+### Common Issues
 
-**Solutions**:
-- Double-check your `TOGGL_API_TOKEN` in the `.env` file
-- Verify the token is copied correctly from your Toggl profile
-- Ensure your Toggl account has API access (may require paid plan)
+**"No module named 'toggl_track_mcp'"**
+- **Using uv:** Make sure you're using the absolute directory path with `uv run --directory`
+- **Manual setup:** Verify Python can find the installed packages: `pip list | grep fastmcp`
 
-### 🌐 Connection Problems
-**Problem**: Cannot connect to Toggl API
+**"spawn uv ENOENT" or "command not found: uv"**
+- Install uv first: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- Restart your terminal after installation
+- Verify installation: `uv --version`
 
-**Solutions**:
-- Run the connection test: `uv run python scripts/test_connection.py`
-- Check your internet connection
-- Verify you can access https://api.track.toggl.com in your browser
+**"spawn python ENOENT" (if not using uv)**
+- Switch to uv setup (recommended) or use full Python path in config
+- Check your Python path: `which python3`
+- Try different common paths: `/usr/bin/python3`, `/usr/local/bin/python3`, `/opt/homebrew/bin/python3`
 
-### 🚦 Rate Limiting
-**Problem**: Getting rate limit errors
+**"Authentication failed"**
+- Verify your Toggl Track API token is correct
+- Check that your Toggl account has API access (may require paid plan)
 
-**Solutions**:
-- The server handles this automatically with retries
-- If persistent, check if other applications are using your API token
-- Consider upgrading your Toggl plan for higher rate limits
+**MCP tools not showing in your AI assistant**
+- Restart your AI assistant after config changes
+- Check the config file syntax is valid JSON
+- Verify file paths are absolute, not relative
 
-### 💳 Payment Required (402)
-**Problem**: API returns payment required error
+### Getting Help
 
-**Solutions**:
-- Check your Toggl subscription status
-- Some API features require a paid Toggl plan
-- Verify your account is in good standing
-
-### 🐛 Other Issues
-- Enable debug logging: `export LOG_LEVEL=debug`
-- Check the health endpoint: `curl http://localhost:8000/health`
-- Review the [Toggl Track API documentation](https://developers.track.toggl.com/)
-
-## Getting Help
-
-- 📖 [Toggl Track API Documentation](https://developers.track.toggl.com/)
-- 🐛 [Report Issues](https://github.com/fuzzylabs/toggl-track-mcp/issues)
-- 💬 [Discussions](https://github.com/fuzzylabs/toggl-track-mcp/discussions)
-- 📧 [Email Support](mailto:tom@fuzzylabs.ai)
-
-## Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature-name`
-3. Make your changes and add tests
-4. Run the test suite: `pytest`
-5. Submit a pull request
-
-## Security & Privacy
-
-- **🔒 Read-Only**: This server only reads data from Toggl Track
-- **🛡️ Token Security**: API tokens are never logged or exposed
-- **🚦 Rate Limiting**: Respects Toggl's API usage policies  
-- **🔍 Data Validation**: All responses validated with Pydantic schemas
-- **🏠 Local Processing**: Your data stays on your machine
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- Built with [FastMCP](https://github.com/modelcontextprotocol/fastmcp) for robust MCP integration
-- Inspired by the [Capsule CRM MCP Server](https://github.com/fuzzylabs/capsule-mcp)
-- Thanks to the [Toggl Track](https://toggl.com) team for their excellent API
+- **Issues & Bugs:** [GitHub Issues](https://github.com/fuzzylabs/toggl-track-mcp/issues)
+- **Toggl API Docs:** [developers.track.toggl.com](https://developers.track.toggl.com)
+- **MCP Protocol:** [modelcontextprotocol.io](https://modelcontextprotocol.io)
 
 ---
 
-<div align="center">
-  <strong>Made with ❤️ by <a href="https://fuzzylabs.ai">Fuzzy Labs</a></strong>
-</div>
+## Render Deployment (Secure Remote HTTP Access)
+
+Want to deploy the MCP server remotely so multiple users can access it via HTTP? Deploy to Render for easy cloud hosting with API key authentication.
+
+### Quick Deploy
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/fuzzylabs/toggl-track-mcp)
+
+### Manual Deployment
+
+1. **Fork this repository** to your GitHub account
+
+2. **Create a Render account** at [render.com](https://render.com)
+
+3. **Create a new Web Service** and connect your GitHub fork
+
+4. **Configure the service:**
+   - **Build Command:** `uv sync`
+   - **Start Command:** `uv run uvicorn toggl_track_mcp.server:app --host 0.0.0.0 --port $PORT`
+   - **Plan:** Free (or choose a paid plan for better performance)
+
+5. **Set environment variables** in Render dashboard:
+   - `TOGGL_API_TOKEN`: Your Toggl Track API token
+   - `MCP_API_KEY`: A secure random API key for authentication (see generation instructions below)
+
+6. **Deploy** - Render will automatically build and deploy your service
+
+### Generating a Secure API Key
+
+Generate a secure random API key for the `MCP_API_KEY` environment variable:
+
+```bash
+# Using Python
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+
+# Using OpenSSL  
+openssl rand -base64 32
+
+# Using Node.js
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+⚠️ **Important**: Store this API key securely - you'll need it to configure your MCP clients.
+
+### Using Your Deployed Server
+
+Once deployed, you'll get a URL like `https://your-service.onrender.com`. Configure your MCP clients to use:
+
+**Claude Desktop:**
+```json
+{
+  "mcpServers": {
+    "toggl-track": {
+      "command": "curl",
+      "args": [
+        "-X", "POST",
+        "https://your-service.onrender.com/mcp/",
+        "-H", "Content-Type: application/json",
+        "-H", "Authorization: Bearer YOUR_MCP_API_KEY_HERE",
+        "-d", "@-"
+      ]
+    }
+  }
+}
+```
+
+Replace `YOUR_MCP_API_KEY_HERE` with the API key you generated and set in Render.
+
+🔒 **Security Note**: The API key authentication is only enforced when the `MCP_API_KEY` environment variable is set. If no API key is configured, the server will accept unauthenticated requests (useful for local development).
+
+**Direct HTTP Access:**
+```bash
+# List available tools
+curl -X POST https://your-service.onrender.com/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_MCP_API_KEY_HERE" \
+  -d '{"jsonrpc": "2.0", "method": "tools/list", "id": 1}'
+
+# Get current time entry
+curl -X POST https://your-service.onrender.com/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_MCP_API_KEY_HERE" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "get_current_time_entry",
+      "arguments": {}
+    },
+    "id": 1
+  }'
+```
+
+**⚠️ Note on Free Tier:** Render's free tier spins down services after inactivity. First requests may take 30-60 seconds to wake up the service.
+
+---
+
+## For Developers
+
+### Development Setup
+
+**Environment Variables (for development):**
+```bash
+cp .env.example .env
+# Edit .env and set TOGGL_API_TOKEN=your_token_here
+```
+
+**Run Tests:**
+```bash
+uv run pytest
+```
+
+**HTTP Server (for testing):**
+```bash
+uv run uvicorn toggl_track_mcp.server:app --reload
+# Server available at http://localhost:8000/mcp/
+```
+
+### API Testing
+
+Test the schema endpoint:
+```bash
+curl -X POST http://localhost:8000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/list",
+    "id": 1
+  }'
+```
+
+Test getting current time entry:
+```bash
+curl -X POST http://localhost:8000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "get_current_time_entry",
+      "arguments": {}
+    },
+    "id": 1
+  }'
+```
+
+### Architecture
+
+- **Server:** FastMCP framework with FastAPI backend
+- **Protocol:** Model Context Protocol (MCP) via stdio
+- **API:** Toggl Track API v9 with read-only access
+- **Authentication:** API token (Basic Auth)
