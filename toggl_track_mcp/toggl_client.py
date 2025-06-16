@@ -52,58 +52,72 @@ class TogglProject(BaseModel):
     """Toggl project model."""
 
     id: int
-    workspace_id: int
+    wid: Optional[int] = None  # workspace_id in API response
+    workspace_id: Optional[int] = None  # Alternative field name
     client_id: Optional[int] = None
     name: str
-    is_private: bool
-    active: bool
-    at: str
-    created_at: str
-    color: str
+    is_private: Optional[bool] = None
+    active: Optional[bool] = None
+    at: Optional[str] = None
+    created_at: Optional[str] = None
+    color: Optional[str] = None
     billable: Optional[bool] = None
     estimated_hours: Optional[int] = None
     rate: Optional[float] = None
     currency: Optional[str] = None
     recurring: bool = False
     actual_hours: Optional[int] = None
+    
+    model_config = ConfigDict(extra="ignore")
 
 
 class TogglClient(BaseModel):
     """Toggl client model."""
 
     id: int
-    workspace_id: int
+    wid: Optional[int] = None  # workspace_id in API response
+    workspace_id: Optional[int] = None  # Alternative field name
     name: str
     notes: Optional[str] = None
-    at: str
+    at: Optional[str] = None
+    # Additional fields that might be present
+    total_count: Optional[int] = None
+    
+    model_config = ConfigDict(extra="ignore")  # Ignore extra fields not defined in model
 
 
 class TogglTimeEntry(BaseModel):
     """Toggl time entry model."""
 
     id: int
-    workspace_id: int
+    wid: Optional[int] = None  # workspace_id in API response
+    workspace_id: Optional[int] = None  # Alternative field name
     project_id: Optional[int] = None
     task_id: Optional[int] = None
-    billable: bool
+    billable: bool = False
     start: str
     stop: Optional[str] = None
     duration: int
-    description: str
+    description: str = ""
     tags: Optional[List[str]] = None
     tag_ids: Optional[List[int]] = None
     duronly: bool = False
-    at: str
-    user_id: int
+    at: Optional[str] = None
+    user_id: Optional[int] = None
+    
+    model_config = ConfigDict(extra="ignore")
 
 
 class TogglTag(BaseModel):
     """Toggl tag model."""
 
     id: int
-    workspace_id: int
+    wid: Optional[int] = None  # workspace_id in API response
+    workspace_id: Optional[int] = None  # Alternative field name
     name: str
-    at: str
+    at: Optional[str] = None
+    
+    model_config = ConfigDict(extra="ignore")
 
 
 class TogglAPIError(Exception):
