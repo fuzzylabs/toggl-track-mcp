@@ -105,7 +105,7 @@ async def get_current_time_entry() -> Dict[str, Any]:
             {
                 "calculated_duration": duration,
                 "duration_formatted": duration_formatted,
-                "is_running": entry.duration < 0,
+                "is_running": (entry.duration or 0) < 0,
             }
         )
 
@@ -158,7 +158,7 @@ async def list_time_entries(
                 {
                     "calculated_duration": duration,
                     "duration_formatted": client.format_duration(duration),
-                    "is_running": entry.duration < 0,
+                    "is_running": (entry.duration or 0) < 0,
                 }
             )
             filtered_entries.append(entry_data)
@@ -200,7 +200,7 @@ async def get_time_entry_details(entry_id: int) -> Dict[str, Any]:
             {
                 "calculated_duration": duration,
                 "duration_formatted": client.format_duration(duration),
-                "is_running": entry.duration < 0,
+                "is_running": (entry.duration or 0) < 0,
             }
         )
 
@@ -328,7 +328,7 @@ async def search_time_entries(
                 {
                     "calculated_duration": duration,
                     "duration_formatted": client.format_duration(duration),
-                    "is_running": entry.duration < 0,
+                    "is_running": (entry.duration or 0) < 0,
                     "match_reason": "description" if description_match else "tags",
                 }
             )
@@ -413,7 +413,7 @@ async def get_time_summary(
             # Project breakdown
             project_name = "No Project"
             if entry.project_id and entry.project_id in project_map:
-                project_name = project_map[entry.project_id].name
+                project_name = project_map[entry.project_id].name or "No Project"
 
             if project_name not in project_breakdown:
                 project_breakdown[project_name] = {"duration": 0, "count": 0}
@@ -425,7 +425,7 @@ async def get_time_summary(
             if entry.project_id and entry.project_id in project_map:
                 project = project_map[entry.project_id]
                 if project.client_id and project.client_id in client_map:
-                    client_name = client_map[project.client_id].name
+                    client_name = client_map[project.client_id].name or "No Client"
 
             if client_name not in client_breakdown:
                 client_breakdown[client_name] = {"duration": 0, "count": 0}
@@ -548,7 +548,7 @@ async def get_team_time_entries(
         )
 
         # Format the response
-        result = {
+        result: Dict[str, Any] = {
             "time_entries": [],
             "summary": {
                 "total_entries": response.total_count or 0,
@@ -707,16 +707,18 @@ async def list_workspace_users() -> Dict[str, Any]:
         data = await client._make_request("GET", f"/workspaces/{workspace_id}/users")
 
         users = []
-        for user_data in data:
-            users.append(
-                {
-                    "id": user_data.get("id"),
-                    "name": user_data.get("fullname") or user_data.get("name"),
-                    "email": user_data.get("email"),
-                    "active": user_data.get("active", True),
-                    "admin": user_data.get("admin", False),
-                }
-            )
+        if isinstance(data, list):
+            for user_data in data:
+                if isinstance(user_data, dict):
+                    users.append(
+                        {
+                            "id": user_data.get("id"),
+                            "name": user_data.get("fullname") or user_data.get("name"),
+                            "email": user_data.get("email"),
+                            "active": user_data.get("active", True),
+                            "admin": user_data.get("admin", False),
+                        }
+                    )
 
         return {
             "users": users,

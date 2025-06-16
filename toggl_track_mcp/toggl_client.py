@@ -398,12 +398,13 @@ class TogglAPIClient:
 
     def calculate_duration(self, time_entry: TogglTimeEntry) -> int:
         """Calculate actual duration for time entry (handles running entries)."""
-        if time_entry.duration < 0:
+        duration = time_entry.duration or 0
+        if duration < 0:
             # Running time entry - duration is negative offset from current time
             import time
 
-            return int(time.time()) + time_entry.duration
-        return time_entry.duration
+            return int(time.time()) + duration
+        return duration
 
     def format_duration(self, seconds: int) -> str:
         """Format duration in seconds to human readable format."""
@@ -447,7 +448,7 @@ class TogglAPIClient:
             workspace_id = self.workspace_id or user.default_workspace_id
 
         # Build request payload
-        payload = {
+        payload: Dict[str, Any] = {
             "start_date": start_date,
             "end_date": end_date,
             "page_size": min(page_size, 1000),  # API max is 1000
@@ -521,7 +522,7 @@ class TogglAPIClient:
             workspace_id = self.workspace_id or user.default_workspace_id
 
         # Build request payload
-        payload = {
+        payload: Dict[str, Any] = {
             "start_date": start_date,
             "end_date": end_date,
             "grouping": grouping,
@@ -558,7 +559,8 @@ class TogglAPIClient:
             )
 
             if response.status_code == 200:
-                return response.json()
+                data = response.json()
+                return data
             else:
                 error_msg = (
                     f"Reports API summary request failed: {response.status_code}"
