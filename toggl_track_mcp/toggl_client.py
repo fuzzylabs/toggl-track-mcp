@@ -559,7 +559,7 @@ class TogglAPIClient:
             )
 
             if response.status_code == 200:
-                data = response.json()
+                data: Dict[str, Any] = response.json()
                 return data
             else:
                 error_msg = (
