@@ -2,7 +2,7 @@
 
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
@@ -24,16 +24,13 @@ TOGGL_BASE_URL = os.getenv("TOGGL_BASE_URL", "https://api.track.toggl.com/api/v9
 TOGGL_WORKSPACE_ID = os.getenv("TOGGL_WORKSPACE_ID")
 MCP_API_KEY = os.getenv("MCP_API_KEY")
 
-# Initialize Toggl client (only if token is available)
-toggl_client = None
+# Initialize Toggl client (optional for testing)
+toggl_client: Optional[TogglAPIClient] = None
 if TOGGL_API_TOKEN:
     workspace_id = int(TOGGL_WORKSPACE_ID) if TOGGL_WORKSPACE_ID else None
     toggl_client = TogglAPIClient(
         api_token=TOGGL_API_TOKEN, base_url=TOGGL_BASE_URL, workspace_id=workspace_id
     )
-
-# Initialize FastMCP
-mcp: FastMCP[None] = FastMCP("Toggl Track MCP")
 
 
 def _get_toggl_client() -> TogglAPIClient:
@@ -43,19 +40,25 @@ def _get_toggl_client() -> TogglAPIClient:
     return toggl_client
 
 
-async def authenticate_request(request: Request) -> None:
+# Initialize FastMCP
+mcp: FastMCP[None] = FastMCP("Toggl Track MCP")
+
+
+async def authenticate_request(
+    request: Request, call_next: Callable[[Request], Awaitable[Any]]
+) -> Any:
     """Authenticate MCP requests if API key is configured."""
     # Skip auth for tests
     if os.getenv("PYTEST_CURRENT_TEST"):
-        return
+        return await call_next(request)
 
     # Skip auth if no API key configured
     if not MCP_API_KEY:
-        return
+        return await call_next(request)
 
     # Only authenticate MCP endpoints
     if not request.url.path.startswith("/mcp"):
-        return
+        return await call_next(request)
 
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
@@ -64,6 +67,8 @@ async def authenticate_request(request: Request) -> None:
     provided_key = auth_header[7:]  # Remove "Bearer " prefix
     if provided_key != MCP_API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API key")
+
+    return await call_next(request)
 
 
 # MCP Tools
@@ -493,9 +498,8 @@ def create_app() -> FastAPI:
     # Add authentication middleware
     app.middleware("http")(authenticate_request)
 
-    # Mount MCP - use type ignore for mypy compatibility
-    mcp_app = mcp.http_app()
-    app.mount("/mcp", mcp_app)
+    # Mount MCP
+    app.mount("/mcp", mcp.http_app)  # type: ignore
 
     @app.get("/")
     async def root() -> RedirectResponse:
