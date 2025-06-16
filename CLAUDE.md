@@ -56,7 +56,11 @@ uv run mypy toggl_track_mcp/           # Type checking
 
 ### Development Server
 ```bash
+# HTTP server mode (for web access)
 uv run uvicorn toggl_track_mcp.server:app --reload  # HTTP server at localhost:8000
+
+# stdio mode (for Claude Code integration)
+uv run python -m toggl_track_mcp  # MCP stdio server
 ```
 
 ### Test MCP Protocol
@@ -71,6 +75,35 @@ curl -X POST http://localhost:8000/mcp/ \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "get_current_user", "arguments": {}}, "id": 1}'
 ```
+
+## Claude Code Integration
+
+To use this MCP server with Claude Code, add this configuration to your Claude Code settings:
+
+```json
+{
+  "toggl-track": {
+    "command": "/Users/your-username/.local/bin/uv",
+    "args": [
+      "run",
+      "--directory",
+      "/path/to/toggl-track-mcp",
+      "python",
+      "-m",
+      "toggl_track_mcp"
+    ],
+    "env": {
+      "TOGGL_API_TOKEN": "your_toggl_api_token_here"
+    }
+  }
+}
+```
+
+**Setup steps:**
+1. Get your Toggl API token from https://track.toggl.com/profile
+2. Replace `/path/to/toggl-track-mcp` with the actual path to this repository
+3. Replace `your_toggl_api_token_here` with your actual API token
+4. Restart Claude Code
 
 ## Configuration Synchronization
 
