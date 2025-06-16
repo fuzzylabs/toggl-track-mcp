@@ -32,6 +32,9 @@ dev = [
     "pre-commit>=3.0.0"
 ]
 
+[project.scripts]
+toggl-track-mcp = "toggl_track_mcp.__main__:main"
+
 [project.urls]
 Homepage = "https://github.com/fuzzylabs/toggl-track-mcp"
 Repository = "https://github.com/fuzzylabs/toggl-track-mcp.git"
