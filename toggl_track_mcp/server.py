@@ -809,7 +809,8 @@ async def create_time_entry(
 
         # Add project info if available
         if entry.project_id:
-            result["message"] += f" for project ID {entry.project_id}"
+            message: str = result["message"]  # type: ignore
+            result["message"] = message + f" for project ID {entry.project_id}"
 
         return result
 
