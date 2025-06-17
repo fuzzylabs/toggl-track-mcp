@@ -689,3 +689,161 @@ class TestPydanticModels:
         assert project.id == 111
         assert project.wid == 456
         assert project.name == "Test Project"
+
+
+class TestCreateTimeEntry:
+    """Test create_time_entry method."""
+    
+    @pytest.mark.asyncio
+    async def test_create_time_entry_running(self, client):
+        """Test creating a running time entry."""
+        mock_response_data = {
+            "id": 789,
+            "workspace_id": 456,
+            "description": "Working on feature",
+            "start": "2023-01-01T10:00:00Z",
+            "duration": -1673456400,  # Running entry
+            "billable": False,
+            "tags": ["development"]
+        }
+        
+        mock_user = TogglUser(
+            id=123, email="test@example.com", fullname="Test", timezone="UTC",
+            default_workspace_id=456, beginning_of_week=1,
+            created_at="2023-01-01T00:00:00Z", updated_at="2023-01-01T00:00:00Z"
+        )
+        
+        with patch.object(client, "_make_request", return_value=mock_response_data) as mock_request:
+            with patch.object(client, "get_current_user", return_value=mock_user):
+                result = await client.create_time_entry(
+                    description="Working on feature",
+                    tags=["development"]
+                )
+                
+                assert isinstance(result, TogglTimeEntry)
+                assert result.id == 789
+                assert result.description == "Working on feature"
+                assert result.duration == -1673456400
+                
+                # Verify the request was made correctly
+                mock_request.assert_called_once()
+                call_args = mock_request.call_args
+                assert call_args[0][0] == "POST"  # method
+                assert "workspaces/123/time_entries" in call_args[0][1]  # endpoint
+                
+                # Check payload
+                payload = call_args[1]["json_data"]
+                assert payload["description"] == "Working on feature"
+                assert payload["tags"] == ["development"]
+                assert payload["billable"] is False
+                assert payload["created_with"] == "toggl-track-mcp"
+                assert "start" in payload
+                assert payload["duration"] < 0  # Running entry
+    
+    @pytest.mark.asyncio
+    async def test_create_time_entry_completed(self, client):
+        """Test creating a completed time entry."""
+        mock_response_data = {
+            "id": 790,
+            "workspace_id": 456,
+            "description": "Meeting with client",
+            "start": "2023-01-01T10:00:00Z",
+            "stop": "2023-01-01T11:00:00Z",
+            "duration": 3600,
+            "billable": True,
+            "project_id": 111
+        }
+        
+        mock_user = TogglUser(
+            id=123, email="test@example.com", fullname="Test", timezone="UTC",
+            default_workspace_id=456, beginning_of_week=1,
+            created_at="2023-01-01T00:00:00Z", updated_at="2023-01-01T00:00:00Z"
+        )
+        
+        with patch.object(client, "_make_request", return_value=mock_response_data) as mock_request:
+            with patch.object(client, "get_current_user", return_value=mock_user):
+                result = await client.create_time_entry(
+                    description="Meeting with client",
+                    duration_seconds=3600,
+                    project_id=111,
+                    billable=True
+                )
+                
+                assert isinstance(result, TogglTimeEntry)
+                assert result.id == 790
+                assert result.description == "Meeting with client"
+                assert result.duration == 3600
+                assert result.billable is True
+                assert result.project_id == 111
+                
+                # Verify the request payload
+                payload = mock_request.call_args[1]["json_data"]
+                assert payload["description"] == "Meeting with client"
+                assert payload["duration"] == 3600
+                assert payload["project_id"] == 111
+                assert payload["billable"] is True
+                assert "stop" in payload  # Should have stop time for completed entry
+    
+    @pytest.mark.asyncio
+    async def test_create_time_entry_with_custom_start_time(self, client):
+        """Test creating time entry with custom start time."""
+        custom_start = "2023-01-01T09:00:00Z"
+        mock_response_data = {
+            "id": 791,
+            "workspace_id": 456,
+            "description": "Custom start time entry",
+            "start": custom_start,
+            "duration": 1800,
+        }
+        
+        mock_user = TogglUser(
+            id=123, email="test@example.com", fullname="Test", timezone="UTC",
+            default_workspace_id=456, beginning_of_week=1,
+            created_at="2023-01-01T00:00:00Z", updated_at="2023-01-01T00:00:00Z"
+        )
+        
+        with patch.object(client, "_make_request", return_value=mock_response_data) as mock_request:
+            with patch.object(client, "get_current_user", return_value=mock_user):
+                result = await client.create_time_entry(
+                    description="Custom start time entry",
+                    start_time=custom_start,
+                    duration_seconds=1800
+                )
+                
+                assert result.start == custom_start
+                
+                # Verify custom start time was used
+                payload = mock_request.call_args[1]["json_data"]
+                assert payload["start"] == custom_start
+    
+    @pytest.mark.asyncio
+    async def test_create_time_entry_api_error(self, client):
+        """Test create_time_entry with API error."""
+        mock_user = TogglUser(
+            id=123, email="test@example.com", fullname="Test", timezone="UTC",
+            default_workspace_id=456, beginning_of_week=1,
+            created_at="2023-01-01T00:00:00Z", updated_at="2023-01-01T00:00:00Z"
+        )
+        
+        with patch.object(client, "get_current_user", return_value=mock_user):
+            with patch.object(client, "_make_request", side_effect=TogglAPIError("Creation failed")):
+                with pytest.raises(TogglAPIError) as exc_info:
+                    await client.create_time_entry("Test entry")
+                
+                assert "Creation failed" in str(exc_info.value)
+    
+    @pytest.mark.asyncio
+    async def test_create_time_entry_invalid_response(self, client):
+        """Test create_time_entry with invalid response format."""
+        mock_user = TogglUser(
+            id=123, email="test@example.com", fullname="Test", timezone="UTC",
+            default_workspace_id=456, beginning_of_week=1,
+            created_at="2023-01-01T00:00:00Z", updated_at="2023-01-01T00:00:00Z"
+        )
+        
+        with patch.object(client, "get_current_user", return_value=mock_user):
+            with patch.object(client, "_make_request", return_value=[]):  # List instead of dict
+                with pytest.raises(TogglAPIError) as exc_info:
+                    await client.create_time_entry("Test entry")
+                
+                assert "Invalid response format for created time entry" in str(exc_info.value)

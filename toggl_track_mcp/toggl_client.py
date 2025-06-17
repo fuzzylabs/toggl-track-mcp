@@ -352,6 +352,81 @@ class TogglAPIClient:
             return TogglTimeEntry(**data)
         raise TogglAPIError("Invalid response format for time entry")
 
+    async def create_time_entry(
+        self,
+        description: str,
+        start_time: Optional[str] = None,
+        duration_seconds: Optional[int] = None,
+        project_id: Optional[int] = None,
+        task_id: Optional[int] = None,
+        billable: bool = False,
+        tags: Optional[List[str]] = None,
+        workspace_id: Optional[int] = None,
+    ) -> TogglTimeEntry:
+        """Create a new time entry.
+
+        Args:
+            description: Time entry description
+            start_time: Start time in ISO format (defaults to now)
+            duration_seconds: Duration in seconds. If None, creates running entry
+            project_id: Project ID to assign
+            task_id: Task ID to assign
+            billable: Whether entry is billable
+            tags: List of tags to assign
+            workspace_id: Workspace ID (uses default if not provided)
+
+        Returns:
+            Created time entry
+
+        Raises:
+            TogglAPIError: If creation fails
+        """
+        if not workspace_id:
+            user = await self.get_current_user()
+            workspace_id = self.workspace_id or user.default_workspace_id
+
+        # Build payload
+        import datetime
+        if not start_time:
+            start_time = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+
+        payload: Dict[str, Any] = {
+            "workspace_id": workspace_id,
+            "description": description,
+            "start": start_time,
+            "billable": billable,
+            "created_with": "toggl-track-mcp",
+        }
+
+        # Add optional fields
+        if project_id:
+            payload["project_id"] = project_id
+        if task_id:
+            payload["task_id"] = task_id
+        if tags:
+            payload["tags"] = tags
+
+        # Handle duration
+        if duration_seconds is not None:
+            # Completed entry
+            payload["duration"] = duration_seconds
+            if duration_seconds > 0:
+                # Calculate stop time
+                start_dt = datetime.datetime.fromisoformat(start_time.rstrip("Z"))
+                stop_dt = start_dt + datetime.timedelta(seconds=duration_seconds)
+                payload["stop"] = stop_dt.isoformat() + "Z"
+        else:
+            # Running entry - use negative timestamp
+            import time
+            payload["duration"] = -int(time.time())
+
+        data = await self._make_request(
+            "POST", f"/workspaces/{workspace_id}/time_entries", json_data=payload
+        )
+        if isinstance(data, dict):
+            return TogglTimeEntry(**data)
+        raise TogglAPIError("Invalid response format for created time entry")
+
     async def get_workspaces(self) -> List[TogglWorkspace]:
         """Get available workspaces."""
         data = await self._make_request("GET", "/me/workspaces")

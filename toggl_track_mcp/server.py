@@ -23,6 +23,7 @@ TOGGL_API_TOKEN = os.getenv("TOGGL_API_TOKEN")
 TOGGL_BASE_URL = os.getenv("TOGGL_BASE_URL", "https://api.track.toggl.com/api/v9")
 TOGGL_WORKSPACE_ID = os.getenv("TOGGL_WORKSPACE_ID")
 MCP_API_KEY = os.getenv("MCP_API_KEY")
+TOGGL_WRITE_ENABLED = os.getenv("TOGGL_WRITE_ENABLED", "false").lower() == "true"
 
 # Initialize Toggl client (optional for testing)
 toggl_client: Optional[TogglAPIClient] = None
@@ -726,6 +727,90 @@ async def list_workspace_users() -> Dict[str, Any]:
             "workspace_id": workspace_id,
             "message": f"Found {len(users)} users in workspace {workspace_id}",
         }
+
+    except TogglAPIError as e:
+        return {"error": str(e)}
+
+
+# Write Operations (Optional - Gated by Environment Variable)
+
+@mcp.tool()
+async def create_time_entry(
+    description: str,
+    project_id: Optional[int] = None,
+    start_time: Optional[str] = None,
+    duration_minutes: Optional[int] = None,
+    billable: bool = False,
+    tags: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Create a new time entry (requires TOGGL_WRITE_ENABLED=true).
+
+    Args:
+        description: Time entry description (required)
+        project_id: Project ID to assign (optional)
+        start_time: Start time in ISO format (defaults to now)
+        duration_minutes: Duration in minutes. If not provided, creates running entry
+        billable: Whether entry is billable (default: false)
+        tags: Comma-separated list of tags (optional)
+
+    Returns:
+        Created time entry data or error message
+
+    Example:
+        create_time_entry("Meeting with client", project_id=123, duration_minutes=60, billable=True)
+    """
+    # Check if write operations are enabled
+    if not TOGGL_WRITE_ENABLED:
+        return {
+            "error": "Write operations are disabled. Set TOGGL_WRITE_ENABLED=true to enable time entry creation.",
+            "help": "This is a security feature to prevent accidental time entry creation."
+        }
+
+    try:
+        client = _get_toggl_client()
+
+        # Parse tags if provided
+        parsed_tags = []
+        if tags:
+            parsed_tags = [tag.strip() for tag in tags.split(",") if tag.strip()]
+
+        # Convert duration from minutes to seconds
+        duration_seconds = None
+        if duration_minutes is not None:
+            duration_seconds = duration_minutes * 60
+
+        # Create time entry
+        entry = await client.create_time_entry(
+            description=description,
+            project_id=project_id,
+            start_time=start_time,
+            duration_seconds=duration_seconds,
+            billable=billable,
+            tags=parsed_tags if parsed_tags else None,
+        )
+
+        # Calculate display duration
+        display_duration = client.calculate_duration(entry)
+        formatted_duration = client.format_duration(display_duration)
+
+        # Determine entry type
+        is_running = (entry.duration or 0) < 0
+        entry_type = "running" if is_running else "completed"
+
+        result = {
+            "time_entry": entry.model_dump(),
+            "calculated_duration": display_duration,
+            "duration_formatted": formatted_duration,
+            "is_running": is_running,
+            "entry_type": entry_type,
+            "message": f"Created {entry_type} time entry: '{description}' ({formatted_duration})"
+        }
+
+        # Add project info if available
+        if entry.project_id:
+            result["message"] += f" for project ID {entry.project_id}"
+
+        return result
 
     except TogglAPIError as e:
         return {"error": str(e)}
