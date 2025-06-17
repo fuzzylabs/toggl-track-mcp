@@ -1,0 +1,129 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+
+  - repo: https://github.com/psf/black
+    rev: 23.9.1
+    hooks:
+      - id: black
+        language_version: python3
+
+  - repo: https://github.com/pycqa/isort
+    rev: 5.12.0
+    hooks:
+      - id: isort
+
+  - repo: https://github.com/charliermarsh/ruff-pre-commit
+    rev: v0.1.0
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+
+  - repo: https://github.com/pre-commit/mypy
+    rev: v1.5.1
+    hooks:
+      - id: mypy
+        additional_dependencies: [types-all]
+
+  - repo: local
+    hooks:
+      - id: pytest-check
+        name: pytest-check
+        entry: uv run pytest --co -q
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: test-coverage-check
+        name: test-coverage-check
+        entry: bash -c 'uv run pytest --cov=toggl_track_mcp --cov-fail-under=90 --tb=no -q'
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: missing-test-files-check
+        name: missing-test-files-check
+        entry: python
+        language: system
+        args:
+          - -c
+          - |
+            import sys
+            from pathlib import Path
+            
+            package_dir = Path("toggl_track_mcp")
+            test_dir = Path("tests")
+            
+            missing_tests = []
+            for py_file in package_dir.rglob("*.py"):
+                if py_file.name == "__init__.py":
+                    continue
+                    
+                rel_path = py_file.relative_to(package_dir)
+                test_file = test_dir / f"test_{rel_path}"
+                
+                if not test_file.exists():
+                    missing_tests.append(str(rel_path))
+            
+            if missing_tests:
+                print("❌ Missing test files for:")
+                for missing in missing_tests:
+                    print(f"  - {missing}")
+                print(f"\n💡 Create test files in tests/ directory")
+                sys.exit(1)
+        pass_filenames: false
+        always_run: true
+
+      - id: mcp-tools-test-check
+        name: mcp-tools-test-check
+        entry: python
+        language: system
+        args:
+          - -c
+          - |
+            import ast
+            import sys
+            from pathlib import Path
+            
+            server_file = Path("toggl_track_mcp/server.py")
+            test_files = list(Path("tests").glob("test_*.py"))
+            
+            if not server_file.exists():
+                sys.exit(0)
+            
+            with open(server_file) as f:
+                tree = ast.parse(f.read())
+            
+            mcp_tools = []
+            for node in ast.walk(tree):
+                if isinstance(node, ast.FunctionDef):
+                    for decorator in node.decorator_list:
+                        if (isinstance(decorator, ast.Call) and 
+                            isinstance(decorator.func, ast.Attribute) and
+                            decorator.func.attr == "tool"):
+                            mcp_tools.append(node.name)
+            
+            test_content = ""
+            for test_file in test_files:
+                if test_file.exists():
+                    with open(test_file) as f:
+                        test_content += f.read()
+            
+            missing_tool_tests = []
+            for tool in mcp_tools:
+                if f"test_{tool}" not in test_content:
+                    missing_tool_tests.append(tool)
+            
+            if missing_tool_tests:
+                print("❌ Missing tests for MCP tools:")
+                for tool in missing_tool_tests:
+                    print(f"  - {tool}")
+                print(f"\n💡 Each @mcp.tool() needs test_{tool}() functions")
+                sys.exit(1)
+        pass_filenames: false
+        always_run: true
