@@ -680,6 +680,391 @@ async def test_list_workspace_users_error_handling():
         assert result["error"] == "API Error"
 
 
+# Tests for create_time_entry MCP tool
+@pytest.mark.asyncio
+async def test_create_time_entry_write_disabled():
+    """Test create_time_entry when write operations are disabled."""
+    with patch("toggl_track_mcp.server.TOGGL_WRITE_ENABLED", False):
+        result = await server.create_time_entry.fn("Test task")
+        
+        assert "error" in result
+        assert "Write operations are disabled" in result["error"]
+        assert "TOGGL_WRITE_ENABLED=true" in result["error"]
+        assert "help" in result
+
+
+@pytest.mark.asyncio
+async def test_create_time_entry_running_success():
+    """Test successful creation of a running time entry."""
+    mock_entry = TogglTimeEntry(
+        id=999,
+        workspace_id=456,
+        description="Test running task",
+        start="2023-01-01T10:00:00Z",
+        duration=-1673456400,  # Negative for running
+        billable=False,
+        user_id=123,
+    )
+    
+    with patch("toggl_track_mcp.server.TOGGL_WRITE_ENABLED", True):
+        with patch("toggl_track_mcp.server._get_toggl_client") as mock_get_client:
+            mock_client = AsyncMock()
+            mock_client.create_time_entry.return_value = mock_entry
+            mock_client.calculate_duration = MagicMock(return_value=1800)  # 30 minutes
+            mock_client.format_duration = MagicMock(return_value="0h 30m")
+            mock_get_client.return_value = mock_client
+            
+            result = await server.create_time_entry.fn("Test running task")
+            
+            assert "error" not in result
+            assert "time_entry" in result
+            assert "message" in result
+            assert result["time_entry"]["id"] == 999
+            assert result["time_entry"]["description"] == "Test running task"
+            assert result["is_running"] is True
+            assert result["entry_type"] == "running"
+            assert result["calculated_duration"] == 1800
+            assert result["duration_formatted"] == "0h 30m"
+            assert "Created running time entry" in result["message"]
+
+
+@pytest.mark.asyncio
+async def test_create_time_entry_completed_success():
+    """Test successful creation of a completed time entry."""
+    mock_entry = TogglTimeEntry(
+        id=998,
+        workspace_id=456,
+        description="Test completed task",
+        start="2023-01-01T10:00:00Z",
+        stop="2023-01-01T11:00:00Z",
+        duration=3600,  # 1 hour
+        billable=True,
+        user_id=123,
+    )
+    
+    with patch("toggl_track_mcp.server.TOGGL_WRITE_ENABLED", True):
+        with patch("toggl_track_mcp.server._get_toggl_client") as mock_get_client:
+            mock_client = AsyncMock()
+            mock_client.create_time_entry.return_value = mock_entry
+            mock_client.calculate_duration = MagicMock(return_value=3600)
+            mock_client.format_duration = MagicMock(return_value="1h 0m")
+            mock_get_client.return_value = mock_client
+            
+            result = await server.create_time_entry.fn(
+                "Test completed task",
+                duration_minutes=60,
+                billable=True
+            )
+            
+            assert "error" not in result
+            assert "time_entry" in result
+            assert result["time_entry"]["id"] == 998
+            assert result["time_entry"]["description"] == "Test completed task"
+            assert result["is_running"] is False
+            assert result["entry_type"] == "completed"
+            assert result["calculated_duration"] == 3600
+            assert result["duration_formatted"] == "1h 0m"
+            assert "Created completed time entry" in result["message"]
+            
+            # Verify create_time_entry was called with correct parameters
+            mock_client.create_time_entry.assert_called_once_with(
+                description="Test completed task",
+                project_id=None,
+                start_time=None,
+                duration_seconds=3600,  # 60 minutes * 60 seconds
+                billable=True,
+                tags=None,
+            )
+
+
+@pytest.mark.asyncio
+async def test_create_time_entry_with_project():
+    """Test creating time entry with project ID."""
+    mock_entry = TogglTimeEntry(
+        id=997,
+        workspace_id=456,
+        project_id=111,
+        description="Test with project",
+        start="2023-01-01T10:00:00Z",
+        duration=-1673456400,
+        billable=False,
+        user_id=123,
+    )
+    
+    with patch("toggl_track_mcp.server.TOGGL_WRITE_ENABLED", True):
+        with patch("toggl_track_mcp.server._get_toggl_client") as mock_get_client:
+            mock_client = AsyncMock()
+            mock_client.create_time_entry.return_value = mock_entry
+            mock_client.calculate_duration = MagicMock(return_value=900)
+            mock_client.format_duration = MagicMock(return_value="0h 15m")
+            mock_get_client.return_value = mock_client
+            
+            result = await server.create_time_entry.fn(
+                "Test with project",
+                project_id=111
+            )
+            
+            assert "error" not in result
+            assert result["time_entry"]["project_id"] == 111
+            assert "for project ID 111" in result["message"]
+            
+            # Verify create_time_entry was called with project_id
+            mock_client.create_time_entry.assert_called_once_with(
+                description="Test with project",
+                project_id=111,
+                start_time=None,
+                duration_seconds=None,
+                billable=False,
+                tags=None,
+            )
+
+
+@pytest.mark.asyncio
+async def test_create_time_entry_with_custom_start_time():
+    """Test creating time entry with custom start time."""
+    mock_entry = TogglTimeEntry(
+        id=996,
+        workspace_id=456,
+        description="Test custom start",
+        start="2023-01-01T08:00:00Z",
+        duration=7200,  # 2 hours
+        billable=False,
+        user_id=123,
+    )
+    
+    with patch("toggl_track_mcp.server.TOGGL_WRITE_ENABLED", True):
+        with patch("toggl_track_mcp.server._get_toggl_client") as mock_get_client:
+            mock_client = AsyncMock()
+            mock_client.create_time_entry.return_value = mock_entry
+            mock_client.calculate_duration = MagicMock(return_value=7200)
+            mock_client.format_duration = MagicMock(return_value="2h 0m")
+            mock_get_client.return_value = mock_client
+            
+            result = await server.create_time_entry.fn(
+                "Test custom start",
+                start_time="2023-01-01T08:00:00Z",
+                duration_minutes=120
+            )
+            
+            assert "error" not in result
+            assert result["time_entry"]["start"] == "2023-01-01T08:00:00Z"
+            
+            # Verify create_time_entry was called with custom start_time
+            mock_client.create_time_entry.assert_called_once_with(
+                description="Test custom start",
+                project_id=None,
+                start_time="2023-01-01T08:00:00Z",
+                duration_seconds=7200,  # 120 minutes * 60 seconds
+                billable=False,
+                tags=None,
+            )
+
+
+@pytest.mark.asyncio
+async def test_create_time_entry_with_tags():
+    """Test creating time entry with tags."""
+    mock_entry = TogglTimeEntry(
+        id=995,
+        workspace_id=456,
+        description="Test with tags",
+        start="2023-01-01T10:00:00Z",
+        duration=-1673456400,
+        billable=False,
+        tags=["meeting", "client", "urgent"],
+        user_id=123,
+    )
+    
+    with patch("toggl_track_mcp.server.TOGGL_WRITE_ENABLED", True):
+        with patch("toggl_track_mcp.server._get_toggl_client") as mock_get_client:
+            mock_client = AsyncMock()
+            mock_client.create_time_entry.return_value = mock_entry
+            mock_client.calculate_duration = MagicMock(return_value=600)
+            mock_client.format_duration = MagicMock(return_value="0h 10m")
+            mock_get_client.return_value = mock_client
+            
+            result = await server.create_time_entry.fn(
+                "Test with tags",
+                tags="meeting, client,urgent"  # Test various spacing
+            )
+            
+            assert "error" not in result
+            assert result["time_entry"]["tags"] == ["meeting", "client", "urgent"]
+            
+            # Verify create_time_entry was called with parsed tags
+            mock_client.create_time_entry.assert_called_once_with(
+                description="Test with tags",
+                project_id=None,
+                start_time=None,
+                duration_seconds=None,
+                billable=False,
+                tags=["meeting", "client", "urgent"],
+            )
+
+
+@pytest.mark.asyncio
+async def test_create_time_entry_with_empty_tags():
+    """Test creating time entry with empty tags string."""
+    mock_entry = TogglTimeEntry(
+        id=994,
+        workspace_id=456,
+        description="Test empty tags",
+        start="2023-01-01T10:00:00Z",
+        duration=-1673456400,
+        billable=False,
+        user_id=123,
+    )
+    
+    with patch("toggl_track_mcp.server.TOGGL_WRITE_ENABLED", True):
+        with patch("toggl_track_mcp.server._get_toggl_client") as mock_get_client:
+            mock_client = AsyncMock()
+            mock_client.create_time_entry.return_value = mock_entry
+            mock_client.calculate_duration = MagicMock(return_value=300)
+            mock_client.format_duration = MagicMock(return_value="0h 5m")
+            mock_get_client.return_value = mock_client
+            
+            result = await server.create_time_entry.fn(
+                "Test empty tags",
+                tags="  ,  ,  "  # Empty tags with spaces
+            )
+            
+            assert "error" not in result
+            
+            # Verify create_time_entry was called with None for tags
+            mock_client.create_time_entry.assert_called_once_with(
+                description="Test empty tags",
+                project_id=None,
+                start_time=None,
+                duration_seconds=None,
+                billable=False,
+                tags=None,
+            )
+
+
+@pytest.mark.asyncio
+async def test_create_time_entry_all_parameters():
+    """Test creating time entry with all parameters."""
+    mock_entry = TogglTimeEntry(
+        id=993,
+        workspace_id=456,
+        project_id=222,
+        description="Full test entry",
+        start="2023-01-01T09:00:00Z",
+        stop="2023-01-01T10:30:00Z",
+        duration=5400,  # 1.5 hours
+        billable=True,
+        tags=["development", "feature"],
+        user_id=123,
+    )
+    
+    with patch("toggl_track_mcp.server.TOGGL_WRITE_ENABLED", True):
+        with patch("toggl_track_mcp.server._get_toggl_client") as mock_get_client:
+            mock_client = AsyncMock()
+            mock_client.create_time_entry.return_value = mock_entry
+            mock_client.calculate_duration = MagicMock(return_value=5400)
+            mock_client.format_duration = MagicMock(return_value="1h 30m")
+            mock_get_client.return_value = mock_client
+            
+            result = await server.create_time_entry.fn(
+                "Full test entry",
+                project_id=222,
+                start_time="2023-01-01T09:00:00Z",
+                duration_minutes=90,
+                billable=True,
+                tags="development,feature"
+            )
+            
+            assert "error" not in result
+            assert result["time_entry"]["id"] == 993
+            assert result["time_entry"]["project_id"] == 222
+            assert result["time_entry"]["billable"] is True
+            assert result["time_entry"]["tags"] == ["development", "feature"]
+            assert result["is_running"] is False
+            assert result["entry_type"] == "completed"
+            assert "for project ID 222" in result["message"]
+            
+            # Verify all parameters were passed correctly
+            mock_client.create_time_entry.assert_called_once_with(
+                description="Full test entry",
+                project_id=222,
+                start_time="2023-01-01T09:00:00Z",
+                duration_seconds=5400,  # 90 minutes * 60 seconds
+                billable=True,
+                tags=["development", "feature"],
+            )
+
+
+@pytest.mark.asyncio
+async def test_create_time_entry_api_error():
+    """Test create_time_entry with API error."""
+    with patch("toggl_track_mcp.server.TOGGL_WRITE_ENABLED", True):
+        with patch("toggl_track_mcp.server._get_toggl_client") as mock_get_client:
+            mock_client = AsyncMock()
+            mock_client.create_time_entry.side_effect = TogglAPIError("Creation failed", status_code=400)
+            mock_get_client.return_value = mock_client
+            
+            result = await server.create_time_entry.fn("Test error")
+            
+            assert "error" in result
+            assert result["error"] == "Creation failed"
+
+
+@pytest.mark.asyncio
+async def test_create_time_entry_client_error():
+    """Test create_time_entry with client initialization error."""
+    with patch("toggl_track_mcp.server.TOGGL_WRITE_ENABLED", True):
+        with patch("toggl_track_mcp.server._get_toggl_client") as mock_get_client:
+            mock_get_client.side_effect = TogglAPIError("Client initialization failed")
+            
+            result = await server.create_time_entry.fn("Test client error")
+            
+            assert "error" in result
+            assert result["error"] == "Client initialization failed"
+
+
+@pytest.mark.asyncio
+async def test_create_time_entry_zero_duration():
+    """Test creating time entry with zero duration."""
+    mock_entry = TogglTimeEntry(
+        id=992,
+        workspace_id=456,
+        description="Zero duration test",
+        start="2023-01-01T10:00:00Z",
+        stop="2023-01-01T10:00:00Z",
+        duration=0,
+        billable=False,
+        user_id=123,
+    )
+    
+    with patch("toggl_track_mcp.server.TOGGL_WRITE_ENABLED", True):
+        with patch("toggl_track_mcp.server._get_toggl_client") as mock_get_client:
+            mock_client = AsyncMock()
+            mock_client.create_time_entry.return_value = mock_entry
+            mock_client.calculate_duration = MagicMock(return_value=0)
+            mock_client.format_duration = MagicMock(return_value="0h 0m")
+            mock_get_client.return_value = mock_client
+            
+            result = await server.create_time_entry.fn(
+                "Zero duration test",
+                duration_minutes=0
+            )
+            
+            assert "error" not in result
+            assert result["time_entry"]["duration"] == 0
+            assert result["is_running"] is False
+            assert result["entry_type"] == "completed"
+            assert result["duration_formatted"] == "0h 0m"
+            
+            # Verify create_time_entry was called with 0 duration_seconds
+            mock_client.create_time_entry.assert_called_once_with(
+                description="Zero duration test",
+                project_id=None,
+                start_time=None,
+                duration_seconds=0,
+                billable=False,
+                tags=None,
+            )
+
+
 # HTTP endpoint tests
 def test_health_endpoint(client):
     """Test health check endpoint."""
