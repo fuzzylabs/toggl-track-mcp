@@ -387,8 +387,13 @@ class TogglAPIClient:
 
         # Build payload
         import datetime
+
         if not start_time:
-            start_time = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+            start_time = (
+                datetime.datetime.now(datetime.timezone.utc)
+                .isoformat()
+                .replace("+00:00", "Z")
+            )
 
         payload: Dict[str, Any] = {
             "workspace_id": workspace_id,
@@ -418,6 +423,7 @@ class TogglAPIClient:
         else:
             # Running entry - use negative timestamp
             import time
+
             payload["duration"] = -int(time.time())
 
         data = await self._make_request(
