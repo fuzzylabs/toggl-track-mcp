@@ -15,10 +15,14 @@ Transform how you work with your Toggl Track time tracking data by asking AI ass
 - *"Show me all time entries tagged with 'meeting'"*
 - *"Which project am I spending the most time on?"*
 - *"Generate a time summary for the Marketing project"*
+- *"Show me team time entries for the past month"* **(Admin only)**
+- *"Generate a team summary grouped by users"* **(Admin only)**
+- *"List all workspace users and their IDs"* **(Admin only)**
 
 **🔒 Read-Only & Secure** — No write access to your time tracking data  
 **🚀 Instant Setup** — Works with any MCP-compatible AI assistant  
-**📊 Complete Coverage** — Access time entries, projects, clients, analytics & more
+**📊 Complete Coverage** — Access time entries, projects, clients, analytics & more  
+**👥 Team Reports** — Admin users can access team-wide time tracking data
 
 ## Quick Start
 
@@ -147,7 +151,9 @@ Try these example queries:
 > *"Show me my current time entry"*  
 > *"How much time did I log yesterday?"*  
 > *"What projects am I working on?"*  
-> *"Generate a weekly time report"*
+> *"Generate a weekly time report"*  
+> *"Show me team time entries for this month"* **(Admin only)**  
+> *"List all workspace users"* **(Admin only)**
 
 ## What You Can Access
 
@@ -163,6 +169,38 @@ This MCP server provides **complete read-only access** to your Toggl Track data:
 | **🏢 Workspaces** | View available workspaces and permissions |
 | **🏷️ Tags** | Browse all tags for categorization |
 | **📈 Analytics** | Generate time summaries, breakdowns, reports |
+| **👥 Team Reports** | **(Admin only)** Access team-wide time entries, summaries, and user data |
+| **🔍 Workspace Users** | **(Admin only)** List all workspace members with IDs for filtering |
+
+## Team Features (Admin Required)
+
+The MCP server includes powerful team reporting capabilities that require **workspace admin permissions**:
+
+### Team Time Entries
+- Access all team members' time entries within date ranges
+- Filter by specific users, projects, clients, or billable status
+- Get rich data including user names, emails, project details, and billing information
+- Support for large datasets (up to 1,000 entries per request)
+
+### Team Summaries
+- Generate aggregated team summaries grouped by users, projects, or clients
+- View total time, billable time, and productivity metrics
+- Formatted duration displays for easy reading
+- Flexible date range filtering
+
+### Workspace User Management
+- List all workspace members with their IDs and details
+- Essential for filtering team reports by specific users
+- View user roles and active status
+
+### Example Team Queries
+Try these with admin permissions:
+- *"Show me all team time entries for last week"*
+- *"Generate a team summary grouped by projects for this month"*
+- *"Which team members logged the most billable hours yesterday?"*
+- *"List all workspace users so I can filter reports"*
+
+**⚠️ Important**: Team features only work if your Toggl Track account has workspace admin permissions. Regular users will receive appropriate error messages when attempting to access team data.
 
 ## Troubleshooting
 
@@ -185,6 +223,11 @@ This MCP server provides **complete read-only access** to your Toggl Track data:
 **"Authentication failed"**
 - Verify your Toggl Track API token is correct
 - Check that your Toggl account has API access (may require paid plan)
+
+**"Admin access required" or team features not working**
+- Team features require workspace admin permissions in Toggl Track
+- Check your role: Profile Settings → Workspaces → your workspace → check if you're an admin
+- Contact your workspace owner to grant admin access if needed
 
 **MCP tools not showing in your AI assistant**
 - Restart your AI assistant after config changes
@@ -342,6 +385,25 @@ curl -X POST http://localhost:8000/mcp/ \
     "params": {
       "name": "get_current_time_entry",
       "arguments": {}
+    },
+    "id": 1
+  }'
+```
+
+Test team time entries (requires admin):
+```bash
+curl -X POST http://localhost:8000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "get_team_time_entries",
+      "arguments": {
+        "start_date": "2025-06-01",
+        "end_date": "2025-06-17"
+      }
     },
     "id": 1
   }'
