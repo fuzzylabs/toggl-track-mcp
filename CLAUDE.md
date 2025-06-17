@@ -9,6 +9,12 @@ This is a Model Context Protocol (MCP) server that exposes Toggl Track time trac
 1. **stdio mode**: For direct integration with AI assistants like Claude Desktop and Cursor
 2. **HTTP mode**: For remote access via web APIs (deployed on Render)
 
+### API Coverage
+
+- **Time Entries API**: Individual user time tracking data
+- **Reports API**: Team-wide time entries and summaries (admin access required)
+- **Workspace API**: Projects, clients, tags, and user management
+
 ### Core Components
 
 - **`toggl_track_mcp/server.py`**: Main MCP server with FastMCP framework and FastAPI backend
@@ -37,11 +43,13 @@ All MCP tools follow a consistent pattern:
 ### Installation and Setup
 ```bash
 uv sync --dev               # Install dependencies including dev tools
+uv run pre-commit install  # Install pre-commit hooks (recommended)
 ```
 
 ### Testing
 ```bash
 uv run pytest              # Run all tests
+uv run pytest --cov=toggl_track_mcp --cov-report=term-missing  # Run with coverage
 uv run pytest tests/test_rate_limiter.py -v  # Run specific test file
 uv run pytest -k "test_name" # Run specific test
 ```
@@ -52,6 +60,7 @@ uv run ruff check toggl_track_mcp/     # Lint code
 uv run black toggl_track_mcp/          # Format code  
 uv run isort toggl_track_mcp/          # Sort imports
 uv run mypy toggl_track_mcp/           # Type checking
+uv run pre-commit run --all-files      # Run all pre-commit hooks
 ```
 
 ### Development Server
@@ -139,9 +148,120 @@ Optional:
 - `MCP_API_KEY`: Authentication for HTTP mode
 - `LOG_LEVEL`: Logging level (default: INFO)
 
+## Testing Requirements
+
+### Mandatory Test Coverage
+- **All MCP tools**: Each `@mcp.tool()` function must have unit tests
+- **API client methods**: Mock HTTP responses and test success/error cases  
+- **New Pydantic models**: Test validation with real API response samples
+- **Integration tests**: Test FastAPI endpoints for new features
+
+### Testing Workflow (Required)
+1. **Write tests BEFORE implementing features** (Test-Driven Development)
+2. Run `uv run pytest --cov=toggl_track_mcp --cov-report=term-missing` - must pass 100%
+3. Maintain >90% test coverage - CI will fail below this threshold
+4. Add integration tests for user-facing features
+5. All existing tests must continue to pass
+6. **Pre-commit hooks automatically enforce** test coverage and missing test detection
+
+### Test Templates
+
+**MCP Tool Test Pattern:**
+```python
+@pytest.mark.asyncio
+async def test_new_mcp_tool_success():
+    """Test successful MCP tool execution."""
+    # Mock the toggl client
+    with patch('toggl_track_mcp.server._get_toggl_client') as mock_client:
+        mock_client.return_value.some_method.return_value = expected_data
+        
+        # Call the MCP tool
+        result = await new_mcp_tool(param1="value")
+        
+        # Assert expected output format
+        assert "error" not in result
+        assert result["expected_key"] == expected_value
+
+@pytest.mark.asyncio  
+async def test_new_mcp_tool_error_handling():
+    """Test MCP tool error handling."""
+    # Mock API error
+    with patch('toggl_track_mcp.server._get_toggl_client') as mock_client:
+        mock_client.side_effect = TogglAPIError("API Error")
+        
+        # Call the MCP tool
+        result = await new_mcp_tool(param1="value")
+        
+        # Assert error response format
+        assert "error" in result
+        assert result["error"] == "API Error"
+```
+
+**API Client Test Pattern:**
+```python
+@pytest.mark.asyncio
+async def test_api_client_method_success():
+    """Test successful API client method."""
+    # Mock HTTP response
+    mock_response = {"id": 123, "name": "Test"}
+    
+    with patch('httpx.AsyncClient') as mock_client:
+        mock_client.return_value.__aenter__.return_value.request.return_value.json.return_value = mock_response
+        mock_client.return_value.__aenter__.return_value.request.return_value.status_code = 200
+        
+        client = TogglAPIClient("fake_token")
+        result = await client.new_method()
+        
+        assert isinstance(result, ExpectedModel)
+        assert result.id == 123
+```
+
+### No Exceptions Policy
+- **PRs without tests for new features will be rejected**
+- **GitHub Actions must pass including test coverage checks**
+- **Existing functionality cannot be broken by new changes**
+- **Test coverage cannot decrease below 90%**
+
+### Definition of Done for New Features
+
+A feature is only complete when:
+- ✅ Implementation works as specified
+- ✅ Unit tests written and passing (TDD approach)
+- ✅ Integration tests added if user-facing
+- ✅ Test coverage maintained above 90%
+- ✅ All existing tests still pass
+- ✅ **Documentation updated** (see Documentation Requirements below)
+- ✅ GitHub Actions pass completely
+
+### Documentation Requirements
+
+**All new features MUST include documentation updates:**
+
+#### User-Facing Features (New MCP Tools)
+- ✅ **README.md**: Add example queries in "What This Does" section
+- ✅ **README.md**: Update "What You Can Access" table with new capabilities
+- ✅ **README.md**: Add troubleshooting entries for common issues
+- ✅ **README.md**: Update API testing examples if applicable
+
+#### Admin-Only Features
+- ✅ **README.md**: Add **(Admin only)** markers to examples
+- ✅ **README.md**: Update "Team Features" section
+- ✅ **README.md**: Add admin permission troubleshooting
+
+#### Internal/Developer Features
+- ✅ **CLAUDE.md**: Update architecture notes for new components
+- ✅ **CLAUDE.md**: Update common patterns if new patterns introduced
+
+#### API Changes
+- ✅ **README.md**: Update API testing examples
+- ✅ **README.md**: Update deployment configuration if needed
+
+**🚨 No Exceptions Policy**: Features without proper documentation updates will be rejected in code review.
+
 ## Common Issues
 
 - **Import Errors**: Use `uv run` commands or ensure proper virtual environment activation
 - **API Token**: Server gracefully handles missing tokens for testing, but tools will fail at runtime
 - **Rate Limiting**: Built-in token bucket prevents API rate limit errors
 - **Type Checking**: All API responses use Pydantic models for type safety
+- **Test Coverage**: Use `pytest-cov` to track coverage and identify untested code paths
