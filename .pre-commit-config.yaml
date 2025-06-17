@@ -127,3 +127,42 @@ repos:
                 sys.exit(1)
         pass_filenames: false
         always_run: true
+
+      - id: documentation-completeness-check
+        name: documentation-completeness-check
+        entry: python
+        language: system
+        args:
+          - -c
+          - |
+            import sys
+            from pathlib import Path
+            
+            readme_file = Path("README.md")
+            
+            if not readme_file.exists():
+                sys.exit(0)
+            
+            # Read README content
+            with open(readme_file) as f:
+                readme_content = f.read().lower()
+            
+            # Check for basic team features documentation
+            team_features = ['team time entries', 'team summary', 'workspace users']
+            missing_features = []
+            
+            for feature in team_features:
+                if feature not in readme_content:
+                    missing_features.append(feature)
+            
+            if missing_features:
+                print("❌ Team features missing from README documentation:")
+                for missing in missing_features:
+                    print(f"  - {missing}")
+                print(f"\n💡 Add team feature documentation to README.md")
+                print("📖 See CLAUDE.md Documentation Requirements section")
+                sys.exit(1)
+            else:
+                print(f"✅ Team features documented in README")
+        pass_filenames: false
+        always_run: true

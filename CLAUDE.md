@@ -230,8 +230,33 @@ A feature is only complete when:
 - ✅ Integration tests added if user-facing
 - ✅ Test coverage maintained above 90%
 - ✅ All existing tests still pass
-- ✅ Documentation updated (if applicable)
+- ✅ **Documentation updated** (see Documentation Requirements below)
 - ✅ GitHub Actions pass completely
+
+### Documentation Requirements
+
+**All new features MUST include documentation updates:**
+
+#### User-Facing Features (New MCP Tools)
+- ✅ **README.md**: Add example queries in "What This Does" section
+- ✅ **README.md**: Update "What You Can Access" table with new capabilities
+- ✅ **README.md**: Add troubleshooting entries for common issues
+- ✅ **README.md**: Update API testing examples if applicable
+
+#### Admin-Only Features
+- ✅ **README.md**: Add **(Admin only)** markers to examples
+- ✅ **README.md**: Update "Team Features" section
+- ✅ **README.md**: Add admin permission troubleshooting
+
+#### Internal/Developer Features
+- ✅ **CLAUDE.md**: Update architecture notes for new components
+- ✅ **CLAUDE.md**: Update common patterns if new patterns introduced
+
+#### API Changes
+- ✅ **README.md**: Update API testing examples
+- ✅ **README.md**: Update deployment configuration if needed
+
+**🚨 No Exceptions Policy**: Features without proper documentation updates will be rejected in code review.
 
 ## Common Issues
 

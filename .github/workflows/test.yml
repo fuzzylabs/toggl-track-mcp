@@ -134,6 +134,56 @@ jobs:
             print(f"✅ All {len(mcp_tools)} MCP tools have tests")
         EOF
     
+    - name: Check MCP tools documented in README
+      run: |
+        uv run python - << 'EOF'
+        import ast
+        import sys
+        from pathlib import Path
+        
+        # Find all @mcp.tool() decorated functions
+        server_file = Path("toggl_track_mcp/server.py")
+        readme_file = Path("README.md")
+        
+        if not server_file.exists() or not readme_file.exists():
+            sys.exit(0)
+        
+        with open(server_file) as f:
+            tree = ast.parse(f.read())
+        
+        # Extract MCP tool names
+        mcp_tools = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef):
+                for decorator in node.decorator_list:
+                    if (isinstance(decorator, ast.Call) and 
+                        isinstance(decorator.func, ast.Attribute) and
+                        decorator.func.attr == "tool"):
+                        mcp_tools.append(node.name)
+        
+        # Read README content
+        with open(readme_file) as f:
+            readme_content = f.read().lower()
+        
+        # For now, just check if basic team features are documented
+        team_features = ['team time entries', 'team summary', 'workspace users']
+        missing_features = []
+        
+        for feature in team_features:
+            if feature not in readme_content:
+                missing_features.append(feature)
+        
+        if missing_features:
+            print("❌ Team features missing from README documentation:")
+            for missing in missing_features:
+                print(f"  - {missing}")
+            print(f"\n💡 Add team feature documentation to README.md")
+            print("📖 See CLAUDE.md Documentation Requirements section")
+            sys.exit(1)
+        else:
+            print(f"✅ Team features documented in README")
+        EOF
+    
     - name: Upload coverage to Codecov
       if: matrix.python-version == '3.11'
       uses: codecov/codecov-action@v3
