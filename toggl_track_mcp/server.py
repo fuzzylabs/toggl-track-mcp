@@ -734,6 +734,7 @@ async def list_workspace_users() -> Dict[str, Any]:
 
 # Write Operations (Optional - Gated by Environment Variable)
 
+
 @mcp.tool()
 async def create_time_entry(
     description: str,
@@ -763,7 +764,7 @@ async def create_time_entry(
     if not TOGGL_WRITE_ENABLED:
         return {
             "error": "Write operations are disabled. Set TOGGL_WRITE_ENABLED=true to enable time entry creation.",
-            "help": "This is a security feature to prevent accidental time entry creation."
+            "help": "This is a security feature to prevent accidental time entry creation.",
         }
 
     try:
@@ -803,12 +804,13 @@ async def create_time_entry(
             "duration_formatted": formatted_duration,
             "is_running": is_running,
             "entry_type": entry_type,
-            "message": f"Created {entry_type} time entry: '{description}' ({formatted_duration})"
+            "message": f"Created {entry_type} time entry: '{description}' ({formatted_duration})",
         }
 
         # Add project info if available
         if entry.project_id:
-            result["message"] += f" for project ID {entry.project_id}"
+            message: str = result["message"]  # type: ignore
+            result["message"] = message + f" for project ID {entry.project_id}"
 
         return result
 

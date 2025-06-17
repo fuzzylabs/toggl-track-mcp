@@ -1,6 +1,6 @@
 # Toggl Track MCP Server
 
-> **Connect your Toggl Track time tracking data to AI assistants** — Access time entries, projects, clients, and analytics through natural language queries, with complete read-only security.
+> **Connect your Toggl Track time tracking data to AI assistants** — Access time entries, projects, clients, and analytics through natural language queries, with secure-by-default read-only access and optional write capabilities.
 
 [![Model Context Protocol](https://img.shields.io/badge/MCP-Compatible-blue)](https://modelcontextprotocol.io) [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-green)](https://python.org) [![Toggl Track API v9](https://img.shields.io/badge/Toggl%20Track-API%20v9-red)](https://developers.track.toggl.com)
 
@@ -21,7 +21,7 @@ Transform how you work with your Toggl Track time tracking data by asking AI ass
 - *"Create a new time entry for 'Meeting with client'"* **(Write mode only)**
 - *"Start a timer for 'Working on feature X'"* **(Write mode only)**
 
-**🔒 Secure by Default** — Read-only access with optional write mode via environment variable  
+**🔒 Secure by Default** — Read-only access with optional write mode via environment variable
 **🚀 Instant Setup** — Works with any MCP-compatible AI assistant  
 **📊 Complete Coverage** — Access time entries, projects, clients, analytics & more  
 **👥 Team Reports** — Admin users can access team-wide time tracking data
