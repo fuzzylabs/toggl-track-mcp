@@ -67,6 +67,8 @@ class TogglProject(BaseModel):
     color: Optional[str] = None
     billable: Optional[bool] = None
     estimated_hours: Optional[int] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
     rate: Optional[float] = None
     currency: Optional[str] = None
     recurring: bool = False
@@ -465,6 +467,110 @@ class TogglAPIClient:
         if isinstance(data, list):
             return [TogglClient(**client) for client in data]
         raise TogglAPIError("Invalid response format for clients")
+
+    async def create_project(
+        self,
+        name: str,
+        client_id: Optional[int] = None,
+        color: Optional[str] = None,
+        billable: bool = False,
+        is_private: bool = True,
+        active: bool = True,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        estimated_hours: Optional[int] = None,
+        workspace_id: Optional[int] = None,
+    ) -> TogglProject:
+        """Create a new project in the workspace.
+
+        ``start_date``, ``end_date`` and ``estimated_hours`` are accepted by the
+        Toggl v9 API but only take effect on plans that support them
+        (Premium / Starter+ for dates, Team+ for estimates). On lower plans
+        Toggl silently ignores the unsupported fields.
+
+        ``active`` defaults to True. Toggl's API defaults to False when the
+        field is omitted, which produces an archived project that rejects
+        member adds and time entries — almost never what callers want.
+        """
+        if not workspace_id:
+            user = await self.get_current_user()
+            workspace_id = self.workspace_id or user.default_workspace_id
+
+        payload: Dict[str, Any] = {
+            "name": name,
+            "billable": billable,
+            "is_private": is_private,
+            "active": active,
+        }
+        if client_id:
+            payload["client_id"] = client_id
+        if color:
+            payload["color"] = color
+        if start_date:
+            payload["start_date"] = start_date
+        if end_date:
+            payload["end_date"] = end_date
+        if estimated_hours is not None:
+            payload["estimated_hours"] = estimated_hours
+
+        data = await self._make_request(
+            "POST", f"/workspaces/{workspace_id}/projects", json_data=payload
+        )
+        if isinstance(data, dict):
+            return TogglProject(**data)
+        raise TogglAPIError("Invalid response format for created project")
+
+    async def add_project_user(
+        self,
+        project_id: int,
+        user_id: int,
+        manager: bool = False,
+        workspace_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Add a workspace user to a project.
+
+        Maps to ``POST /workspaces/{workspace_id}/project_users``. Toggl accepts
+        only one user per call, so to add several members the caller invokes
+        this method once per user.
+        """
+        if not workspace_id:
+            user = await self.get_current_user()
+            workspace_id = self.workspace_id or user.default_workspace_id
+
+        payload: Dict[str, Any] = {
+            "project_id": project_id,
+            "user_id": user_id,
+            "manager": manager,
+        }
+
+        data = await self._make_request(
+            "POST", f"/workspaces/{workspace_id}/project_users", json_data=payload
+        )
+        if isinstance(data, dict):
+            return data
+        raise TogglAPIError("Invalid response format for created project user")
+
+    async def create_client(
+        self,
+        name: str,
+        notes: Optional[str] = None,
+        workspace_id: Optional[int] = None,
+    ) -> TogglClient:
+        """Create a new client in the workspace."""
+        if not workspace_id:
+            user = await self.get_current_user()
+            workspace_id = self.workspace_id or user.default_workspace_id
+
+        payload: Dict[str, Any] = {"name": name, "wid": workspace_id}
+        if notes:
+            payload["notes"] = notes
+
+        data = await self._make_request(
+            "POST", f"/workspaces/{workspace_id}/clients", json_data=payload
+        )
+        if isinstance(data, dict):
+            return TogglClient(**data)
+        raise TogglAPIError("Invalid response format for created client")
 
     async def get_tags(self, workspace_id: Optional[int] = None) -> List[TogglTag]:
         """Get tags for workspace."""

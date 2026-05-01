@@ -23,7 +23,6 @@ TOGGL_API_TOKEN = os.getenv("TOGGL_API_TOKEN")
 TOGGL_BASE_URL = os.getenv("TOGGL_BASE_URL", "https://api.track.toggl.com/api/v9")
 TOGGL_WORKSPACE_ID = os.getenv("TOGGL_WORKSPACE_ID")
 MCP_API_KEY = os.getenv("MCP_API_KEY")
-TOGGL_WRITE_ENABLED = os.getenv("TOGGL_WRITE_ENABLED", "false").lower() == "true"
 
 # Initialize Toggl client (optional for testing)
 toggl_client: Optional[TogglAPIClient] = None
@@ -744,7 +743,7 @@ async def create_time_entry(
     billable: bool = False,
     tags: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Create a new time entry (requires TOGGL_WRITE_ENABLED=true).
+    """Create a new time entry.
 
     Args:
         description: Time entry description (required)
@@ -760,13 +759,6 @@ async def create_time_entry(
     Example:
         create_time_entry("Meeting with client", project_id=123, duration_minutes=60, billable=True)
     """
-    # Check if write operations are enabled
-    if not TOGGL_WRITE_ENABLED:
-        return {
-            "error": "Write operations are disabled. Set TOGGL_WRITE_ENABLED=true to enable time entry creation.",
-            "help": "This is a security feature to prevent accidental time entry creation.",
-        }
-
     try:
         client = _get_toggl_client()
 
@@ -814,6 +806,114 @@ async def create_time_entry(
 
         return result
 
+    except TogglAPIError as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+async def create_project(
+    name: str,
+    client_id: Optional[int] = None,
+    color: Optional[str] = None,
+    billable: bool = False,
+    is_private: bool = True,
+    active: bool = True,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    estimated_hours: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Create a new project in the workspace.
+
+    Args:
+        name: Project name (required)
+        client_id: Client ID to associate with the project (optional)
+        color: Hex color code e.g. "#e20505" (optional)
+        billable: Whether the project is billable (default: false)
+        is_private: Whether the project is private (default: true)
+        active: Whether the project is active (default: true). Set false to
+            create an archived project. Toggl's API defaults to false when this
+            field is omitted, which is almost never what callers want — archived
+            projects reject member adds and time entries.
+        start_date: Project start date in YYYY-MM-DD format (optional, plan-dependent)
+        end_date: Project end date in YYYY-MM-DD format (optional, plan-dependent)
+        estimated_hours: Total estimated hours for the project (optional, plan-dependent)
+
+    Note:
+        ``start_date``, ``end_date`` and ``estimated_hours`` are accepted by
+        the Toggl v9 API on supported plans only. On plans that don't expose
+        these fields, Toggl silently ignores them and the project is still
+        created.
+    """
+    try:
+        client = _get_toggl_client()
+        project = await client.create_project(
+            name=name,
+            client_id=client_id,
+            color=color,
+            billable=billable,
+            is_private=is_private,
+            active=active,
+            start_date=start_date,
+            end_date=end_date,
+            estimated_hours=estimated_hours,
+        )
+        return {
+            "project": project.model_dump(),
+            "message": f"Created project: '{project.name}' (ID: {project.id})",
+        }
+    except TogglAPIError as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+async def add_project_user(
+    project_id: int,
+    user_id: int,
+    manager: bool = False,
+) -> Dict[str, Any]:
+    """Add a workspace user to a project.
+
+    Toggl's API accepts one user per call, so callers invoke this once per
+    member. Use ``list_workspace_users`` first to resolve names to IDs.
+
+    Args:
+        project_id: ID of the project to add the user to (required)
+        user_id: Workspace user ID to add (required)
+        manager: Whether the user is a project manager (default: false)
+    """
+    try:
+        client = _get_toggl_client()
+        result = await client.add_project_user(
+            project_id=project_id,
+            user_id=user_id,
+            manager=manager,
+        )
+        return {
+            "project_user": result,
+            "message": f"Added user {user_id} to project {project_id}",
+        }
+    except TogglAPIError as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+async def create_client(
+    name: str,
+    notes: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Create a new client in the workspace.
+
+    Args:
+        name: Client name (required)
+        notes: Optional notes about the client
+    """
+    try:
+        client = _get_toggl_client()
+        toggl_client = await client.create_client(name=name, notes=notes)
+        return {
+            "client": toggl_client.model_dump(),
+            "message": f"Created client: '{toggl_client.name}' (ID: {toggl_client.id})",
+        }
     except TogglAPIError as e:
         return {"error": str(e)}
 

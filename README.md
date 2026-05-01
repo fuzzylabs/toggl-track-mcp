@@ -20,6 +20,9 @@ Transform how you work with your Toggl Track time tracking data by asking AI ass
 - *"List all workspace users and their IDs"* **(Admin only)**
 - *"Create a new time entry for 'Meeting with client'"* **(Write mode only)**
 - *"Start a timer for 'Working on feature X'"* **(Write mode only)**
+- *"Create a new client called 'Acme Corp' with the note 'Q3 SOW pending'"*
+- *"Create a new project AIaaS-200-3001 for client 47847188, billable, starting 2026-05-01, ending 2026-08-31, 120 estimated hours"*
+- *"Add Sam (user 11551609) and Tiffany (user 12299621) to project 213632529"*
 
 **🔒 Secure by Default** — Read-only access with optional write mode via environment variable
 **🚀 Instant Setup** — Works with any MCP-compatible AI assistant  
@@ -212,7 +215,10 @@ This MCP server provides **complete access** to your Toggl Track data:
 | **📊 Time Entries** | List, search, filter by date, project, tags |
 | **✏️ Create Entries** | **(Write mode only)** Create new time entries, start/stop timers |
 | **📂 Projects** | View project details, status, client assignments |
+| **🆕 Create Projects** | Create new projects with client, color, billable, dates, and estimated hours |
 | **👥 Clients** | Access client information and relationships |
+| **➕ Create Clients** | Create new clients with optional notes |
+| **👤 Project Members** | Add users to projects (one per call); set as manager |
 | **🏢 Workspaces** | View available workspaces and permissions |
 | **🏷️ Tags** | Browse all tags for categorization |
 | **📈 Analytics** | Generate time summaries, breakdowns, reports |
