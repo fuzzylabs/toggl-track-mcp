@@ -918,6 +918,163 @@ async def create_client(
         return {"error": str(e)}
 
 
+# Custom Reports (Analytics API)
+
+
+@mcp.tool()
+async def list_custom_reports(only_pinned: bool = False) -> Dict[str, Any]:
+    """List the saved custom reports (dashboards) in the organization.
+
+    These are the multi-chart reports built in Toggl's "My Reports" section.
+    Use the returned report IDs with get_custom_report and run_custom_report.
+
+    Args:
+        only_pinned: Only return reports pinned to the Toggl sidebar
+    """
+    try:
+        client = _get_toggl_client()
+        dashboards = await client.list_dashboards(only_pinned=only_pinned)
+
+        reports = []
+        for dashboard in dashboards:
+            chart_details = (dashboard.chart_summary or {}).get("chart_details") or []
+            preferences = dashboard.preferences or {}
+            reports.append(
+                {
+                    "id": dashboard.id,
+                    "name": dashboard.name,
+                    "pinned": dashboard.pinned,
+                    "date_preset": (preferences.get("datePeriod") or {}).get("preset"),
+                    "chart_count": len(chart_details),
+                    "chart_types": [chart.get("chart_type") for chart in chart_details],
+                    "creator": dashboard.creator_name,
+                    "updated_at": dashboard.updated_at,
+                }
+            )
+
+        return {
+            "custom_reports": reports,
+            "total_count": len(reports),
+            "message": f"Found {len(reports)} custom reports",
+        }
+    except TogglAPIError as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+async def get_custom_report(report_id: int) -> Dict[str, Any]:
+    """Get a custom report's definition: its charts, groupings and filters.
+
+    Shows what each chart measures and how the report is filtered, which is
+    what you need to pick a chart_id for run_custom_report.
+
+    Args:
+        report_id: Custom report ID (from list_custom_reports)
+    """
+    try:
+        client = _get_toggl_client()
+        dashboard = await client.get_dashboard(report_id)
+
+        charts = []
+        for chart in dashboard.charts or []:
+            query = chart.query or {}
+            charts.append(
+                {
+                    "chart_id": chart.id,
+                    "name": chart.name,
+                    "type": chart.type,
+                    "groupings": [
+                        grouping.get("property")
+                        for grouping in query.get("groupings") or []
+                    ],
+                    "aggregations": [
+                        f"{aggregation.get('function')}({aggregation.get('property')})"
+                        for aggregation in query.get("aggregations") or []
+                    ],
+                    "filters": query.get("filters") or [],
+                }
+            )
+
+        preferences = dashboard.preferences or {}
+        return {
+            "report": {
+                "id": dashboard.id,
+                "name": dashboard.name,
+                "organization_id": dashboard.organization_id,
+                "date_preset": (preferences.get("datePeriod") or {}).get("preset"),
+                "report_filters": dashboard.filters or [],
+                "charts": charts,
+                "creator": dashboard.creator_name,
+                "updated_at": dashboard.updated_at,
+            },
+            "message": f"Custom report '{dashboard.name}' with {len(charts)} charts",
+        }
+    except TogglAPIError as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+async def run_custom_report(
+    report_id: int,
+    chart_id: Optional[int] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Run a custom report and return its data.
+
+    Runs one chart of the report with its saved groupings and filters applied,
+    over the report's own date period unless dates are given here. IDs in the
+    results are resolved to names, and durations are returned in seconds
+    alongside the raw milliseconds the API reports.
+
+    Args:
+        report_id: Custom report ID (from list_custom_reports)
+        chart_id: Chart to run (defaults to the report's first chart)
+        start_date: Override start date in YYYY-MM-DD format
+        end_date: Override end date in YYYY-MM-DD format
+    """
+    try:
+        client = _get_toggl_client()
+        result = await client.run_dashboard_chart(
+            dashboard_id=report_id,
+            chart_id=chart_id,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+        for row in result["rows"]:
+            if "sum_duration_seconds" in row:
+                row["duration_formatted"] = client.format_duration(
+                    row["sum_duration_seconds"]
+                )
+
+        totals = result["totals"]
+        if "sum_duration_seconds" in totals:
+            totals["duration_formatted"] = client.format_duration(
+                totals["sum_duration_seconds"]
+            )
+
+        period = result["period"]
+        return {
+            "report_id": result["report_id"],
+            "report_name": result["report_name"],
+            "chart_id": result["chart_id"],
+            "chart_type": result["chart_type"],
+            "period": period,
+            "rows": result["rows"],
+            "totals": totals,
+            "row_count": len(result["rows"]),
+            "message": (
+                f"'{result['report_name']}' returned {len(result['rows'])} rows "
+                f"for {period['from']} to {period['to']}"
+            ),
+        }
+    except TogglAPIError as e:
+        return {"error": str(e)}
+    except ValueError as e:
+        return {"error": str(e)}
+
+
 # FastAPI application setup
 def create_app() -> FastAPI:
     """Create FastAPI application with MCP integration."""

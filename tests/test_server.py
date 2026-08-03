@@ -21,6 +21,10 @@ from toggl_track_mcp.toggl_client import (
     TogglReportsResponse,
     TogglReportTimeEntry,
 )
+from toggl_track_mcp.analytics import (
+    TogglAnalyticsChart,
+    TogglAnalyticsDashboard,
+)
 
 
 @pytest.fixture
@@ -1479,3 +1483,204 @@ async def test_add_project_user_error_handling():
 
         assert "error" in result
         assert result["error"] == "API Error"
+
+
+# Tests for custom reports (Analytics API)
+
+
+def create_mock_dashboard():
+    """Create a mock custom report with one table chart."""
+    return TogglAnalyticsDashboard(
+        id=12345,
+        organization_id=999,
+        name="Client time by team",
+        pinned=False,
+        preferences={"datePeriod": {"preset": "prevMonth"}},
+        filters=[{"property": "user_id", "operator": "in", "value": [7]}],
+        chart_summary={"chart_details": [{"chart_type": "table", "chart_id": 51}]},
+        charts=[
+            TogglAnalyticsChart(
+                id=51,
+                type="table",
+                query={
+                    "groupings": [{"property": "client_id"}],
+                    "aggregations": [{"function": "sum", "property": "duration"}],
+                    "filters": [
+                        {"property": "workspace_id", "operator": "=", "value": 456}
+                    ],
+                },
+            )
+        ],
+        creator_name="Test User",
+        updated_at="2026-07-07T16:25:06Z",
+    )
+
+
+@pytest.mark.asyncio
+async def test_list_custom_reports_success():
+    """Test successful list_custom_reports execution."""
+    with patch("toggl_track_mcp.server._get_toggl_client") as mock_get_client:
+        mock_client = AsyncMock()
+        mock_client.list_dashboards.return_value = [create_mock_dashboard()]
+        mock_get_client.return_value = mock_client
+
+        result = await server.list_custom_reports.fn()
+
+        assert "error" not in result
+        assert result["total_count"] == 1
+        report = result["custom_reports"][0]
+        assert report["id"] == 12345
+        assert report["name"] == "Client time by team"
+        assert report["chart_count"] == 1
+        assert report["chart_types"] == ["table"]
+        assert report["date_preset"] == "prevMonth"
+
+
+@pytest.mark.asyncio
+async def test_list_custom_reports_only_pinned():
+    """Test list_custom_reports passes the pinned filter through."""
+    with patch("toggl_track_mcp.server._get_toggl_client") as mock_get_client:
+        mock_client = AsyncMock()
+        mock_client.list_dashboards.return_value = []
+        mock_get_client.return_value = mock_client
+
+        result = await server.list_custom_reports.fn(only_pinned=True)
+
+        mock_client.list_dashboards.assert_awaited_once_with(only_pinned=True)
+        assert result["total_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_list_custom_reports_error_handling():
+    """Test list_custom_reports error handling."""
+    with patch("toggl_track_mcp.server._get_toggl_client") as mock_get_client:
+        mock_get_client.side_effect = TogglAPIError("API Error")
+
+        result = await server.list_custom_reports.fn()
+
+        assert result["error"] == "API Error"
+
+
+@pytest.mark.asyncio
+async def test_get_custom_report_success():
+    """Test successful get_custom_report execution."""
+    with patch("toggl_track_mcp.server._get_toggl_client") as mock_get_client:
+        mock_client = AsyncMock()
+        mock_client.get_dashboard.return_value = create_mock_dashboard()
+        mock_get_client.return_value = mock_client
+
+        result = await server.get_custom_report.fn(report_id=12345)
+
+        assert "error" not in result
+        report = result["report"]
+        assert report["name"] == "Client time by team"
+        assert report["report_filters"] == [
+            {"property": "user_id", "operator": "in", "value": [7]}
+        ]
+        chart = report["charts"][0]
+        assert chart["chart_id"] == 51
+        assert chart["groupings"] == ["client_id"]
+        assert chart["aggregations"] == ["sum(duration)"]
+
+
+@pytest.mark.asyncio
+async def test_get_custom_report_error_handling():
+    """Test get_custom_report error handling."""
+    with patch("toggl_track_mcp.server._get_toggl_client") as mock_get_client:
+        mock_get_client.side_effect = TogglAPIError("Not found")
+
+        result = await server.get_custom_report.fn(report_id=1)
+
+        assert result["error"] == "Not found"
+
+
+@pytest.mark.asyncio
+async def test_run_custom_report_success():
+    """Test successful run_custom_report execution."""
+    chart_data = {
+        "report_id": 12345,
+        "report_name": "Client time by team",
+        "chart_id": 51,
+        "chart_type": "table",
+        "period": {"from": "2026-07-01", "to": "2026-07-31"},
+        "rows": [
+            {
+                "client_id": 1,
+                "client_name": "Acme Corp",
+                "sum_duration": 7200000,
+                "sum_duration_seconds": 7200,
+            }
+        ],
+        "totals": {"sum_duration": 7200000, "sum_duration_seconds": 7200},
+        "query": {},
+    }
+
+    with patch("toggl_track_mcp.server._get_toggl_client") as mock_get_client:
+        mock_client = AsyncMock()
+        mock_client.run_dashboard_chart.return_value = chart_data
+        mock_client.format_duration = MagicMock(return_value="2h 0m")
+        mock_get_client.return_value = mock_client
+
+        result = await server.run_custom_report.fn(report_id=12345)
+
+        assert "error" not in result
+        assert result["row_count"] == 1
+        assert result["rows"][0]["duration_formatted"] == "2h 0m"
+        assert result["totals"]["duration_formatted"] == "2h 0m"
+        assert "2026-07-01 to 2026-07-31" in result["message"]
+
+
+@pytest.mark.asyncio
+async def test_run_custom_report_passes_overrides():
+    """Test run_custom_report forwards chart and date overrides."""
+    with patch("toggl_track_mcp.server._get_toggl_client") as mock_get_client:
+        mock_client = AsyncMock()
+        mock_client.run_dashboard_chart.return_value = {
+            "report_id": 1,
+            "report_name": "R",
+            "chart_id": 52,
+            "chart_type": "bar",
+            "period": {"from": "2026-01-01", "to": "2026-01-31"},
+            "rows": [],
+            "totals": {},
+            "query": {},
+        }
+        mock_get_client.return_value = mock_client
+
+        result = await server.run_custom_report.fn(
+            report_id=1, chart_id=52, start_date="2026-01-01", end_date="2026-01-31"
+        )
+
+        mock_client.run_dashboard_chart.assert_awaited_once_with(
+            dashboard_id=1,
+            chart_id=52,
+            start_date="2026-01-01",
+            end_date="2026-01-31",
+        )
+        assert result["row_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_run_custom_report_error_handling():
+    """Test run_custom_report error handling."""
+    with patch("toggl_track_mcp.server._get_toggl_client") as mock_get_client:
+        mock_get_client.side_effect = TogglAPIError("API Error")
+
+        result = await server.run_custom_report.fn(report_id=1)
+
+        assert result["error"] == "API Error"
+
+
+@pytest.mark.asyncio
+async def test_run_custom_report_unresolvable_date_range():
+    """Test run_custom_report reports an unresolvable saved date range."""
+    with patch("toggl_track_mcp.server._get_toggl_client") as mock_get_client:
+        mock_client = AsyncMock()
+        mock_client.run_dashboard_chart.side_effect = ValueError(
+            "Report uses a custom date range but has no dates saved."
+        )
+        mock_get_client.return_value = mock_client
+
+        result = await server.run_custom_report.fn(report_id=1)
+
+        assert "custom date range" in result["error"]
