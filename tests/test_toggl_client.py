@@ -1364,3 +1364,104 @@ class TestAnalyticsAPI:
 
         org.assert_awaited_once()
         assert run.call_args.args[0] == 999
+
+    @pytest.mark.asyncio
+    async def test_run_dashboard_chart_skips_user_lookup_for_explicit_dates(
+        self, client, dashboard_payload
+    ):
+        """Only a relative preset needs the caller's week start."""
+        dashboard = TogglAnalyticsDashboard(**dashboard_payload)
+
+        with patch.object(client, "get_current_user") as user_lookup:
+            with patch.object(client, "run_analytics_query", return_value={}):
+                await client.run_dashboard_chart(
+                    12345,
+                    start_date="2026-07-01",
+                    end_date="2026-07-31",
+                    dashboard=dashboard,
+                )
+
+        user_lookup.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_run_dashboard_chart_uses_reports_own_week_start(self, client, user):
+        """A week-based preset covers the report's week, not the caller's."""
+        dashboard = TogglAnalyticsDashboard(
+            id=1,
+            organization_id=999,
+            preferences={"datePeriod": {"preset": "thisWeek"}, "begginingOfWeek": 0},
+            charts=[TogglAnalyticsChart(id=51, type="bar", query={})],
+        )
+
+        with patch.object(client, "get_current_user", return_value=user):
+            with patch.object(client, "run_analytics_query", return_value={}) as run:
+                result = await client.run_dashboard_chart(1, dashboard=dashboard)
+
+        # user.beginning_of_week is 1 (Monday); the report says 0 (Sunday)
+        from datetime import date, timedelta
+
+        expected_start = date.today() - timedelta(days=(date.today().weekday() + 1) % 7)
+        assert result["period"]["from"] == expected_start.isoformat()
+        assert run.call_args.args[1]["period"] == result["period"]
+
+    @pytest.mark.asyncio
+    async def test_get_organization_id_is_cached(self, client, user):
+        workspaces = [TogglWorkspace(id=123, organization_id=999)]
+
+        with patch.object(client, "get_current_user", return_value=user) as user_lookup:
+            with patch.object(client, "get_workspaces", return_value=workspaces):
+                assert await client.get_organization_id() == 999
+                assert await client.get_organization_id() == 999
+
+        user_lookup.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_get_organization_id_explicit_workspace_is_not_cached(self, client):
+        workspaces = [
+            TogglWorkspace(id=123, organization_id=999),
+            TogglWorkspace(id=456, organization_id=888),
+        ]
+
+        with patch.object(client, "get_workspaces", return_value=workspaces):
+            assert await client.get_organization_id(workspace_id=456) == 888
+
+        assert client._organization_id is None
+
+
+class TestClientErrorsAreNotRetried:
+    """A 4xx will fail identically on retry, so it should surface immediately."""
+
+    @pytest.mark.asyncio
+    async def test_client_error_raises_without_retrying(self, client):
+        request = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                "Error",
+                request=MagicMock(),
+                response=MagicMock(status_code=403, text="Forbidden"),
+            )
+        )
+        with patch("httpx.AsyncClient") as mock_httpx:
+            mock_httpx.return_value.__aenter__.return_value.request = request
+
+            with pytest.raises(TogglAPIError) as exc_info:
+                await client._make_request("GET", "/test")
+
+        assert exc_info.value.status_code == 403
+        assert request.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_server_error_still_retries(self, client):
+        request = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                "Error",
+                request=MagicMock(),
+                response=MagicMock(status_code=500, text="Server Error"),
+            )
+        )
+        with patch("httpx.AsyncClient") as mock_httpx:
+            mock_httpx.return_value.__aenter__.return_value.request = request
+            with patch("asyncio.sleep", new=AsyncMock()):
+                with pytest.raises(TogglAPIError):
+                    await client._make_request("GET", "/test", retries=2)
+
+        assert request.await_count == 3

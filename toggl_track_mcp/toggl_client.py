@@ -228,6 +228,7 @@ class TogglAPIClient:
         self.base_url = base_url.rstrip("/")
         self.workspace_id = workspace_id
         self.rate_limiter = TokenBucketRateLimiter(requests_per_second, burst_size)
+        self._organization_id: Optional[int] = None
 
         # Create auth header
         auth_string = f"{api_token}:api_token"
@@ -311,7 +312,11 @@ class TogglAPIClient:
                     return result  # type: ignore[no-any-return]
 
             except httpx.HTTPStatusError as e:
-                if attempt == retries:
+                # A 4xx is the server rejecting the request itself (bad payload,
+                # no permission, no such resource) and will fail identically on
+                # retry, so surface it rather than backing off three times.
+                is_client_error = 400 <= e.response.status_code < 500
+                if attempt == retries or is_client_error:
                     error_msg = f"HTTP {e.response.status_code}: {e.response.text}"
                     raise TogglAPIError(error_msg, status_code=e.response.status_code)
                 await asyncio.sleep(2**attempt)  # Exponential backoff
@@ -781,14 +786,21 @@ class TogglAPIClient:
         """Get the organization ID that owns a workspace.
 
         Custom reports are scoped to an organization, not a workspace, but the
-        workspace is what callers usually have to hand.
+        workspace is what callers usually have to hand. Resolving it costs two
+        requests, so the default workspace's organization is cached.
         """
+        if not workspace_id and self._organization_id is not None:
+            return self._organization_id
+
+        requested_id = workspace_id
         if not workspace_id:
             user = await self.get_current_user()
             workspace_id = self.workspace_id or user.default_workspace_id
 
         for workspace in await self.get_workspaces():
             if workspace.id == workspace_id and workspace.organization_id:
+                if requested_id is None:
+                    self._organization_id = workspace.organization_id
                 return workspace.organization_id
 
         raise TogglAPIError(f"No organization found for workspace {workspace_id}")
@@ -894,12 +906,19 @@ class TogglAPIClient:
                 )
             chart = matches[0]
 
-        user = await self.get_current_user()
+        # Only a relative preset needs a week start, and the report's own
+        # setting wins over the caller's, so skip the /me call when both dates
+        # are given.
+        fallback_beginning_of_week = None
+        if not (start_date and end_date):
+            user = await self.get_current_user()
+            fallback_beginning_of_week = user.beginning_of_week
+
         period = period_for_dashboard(
             dashboard,
             start_date=start_date,
             end_date=end_date,
-            beginning_of_week=user.beginning_of_week,
+            fallback_beginning_of_week=fallback_beginning_of_week,
         )
 
         query, local_ordinations = build_query(dashboard, chart, period)

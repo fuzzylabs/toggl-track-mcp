@@ -8,7 +8,7 @@ derived from the Toggl web app's own API client and verified against the live
 API. It authenticates with the ordinary API token, but treat it as unversioned:
 Toggl can change it without notice.
 
-Two quirks of that API shape the code below:
+Quirks of that API shape the code below:
 
 * Durations come back in **milliseconds**, unlike Reports v3 which uses seconds.
 * The query engine rejects some field combinations a saved chart may contain:
@@ -16,6 +16,12 @@ Two quirks of that API shape the code below:
   is not grouped (a ``client_name`` sort on a ``client_id`` grouping, for
   instance). Both return a 500 rather than a validation error, so
   :func:`build_query` strips them and the ordering is applied locally instead.
+* A saved chart may carry the page size the UI renders it with, and a paginated
+  response carries no total count. :func:`build_query` drops it so the whole
+  result set comes back rather than a page that looks complete.
+* Queries are quota'd separately from the rest of the API: responses carry
+  ``x-toggl-quota-remaining`` and ``x-toggl-quota-resets-in``, measured at 240
+  queries per hour. Worth keeping in mind before running a report in a loop.
 
 This module holds only pure functions and models. The HTTP calls live on
 ``TogglAPIClient`` in ``toggl_client.py``.
@@ -217,25 +223,41 @@ def period_for_dashboard(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     today: Optional[date] = None,
-    beginning_of_week: Optional[int] = None,
+    fallback_beginning_of_week: Optional[int] = None,
 ) -> Dict[str, str]:
     """Work out the date window to run a report over.
 
     Explicit dates win; otherwise the report's saved preset is resolved.
+
+    Args:
+        dashboard: The report, whose preferences hold the preset and week start
+        start_date: Overrides the resolved start date
+        end_date: Overrides the resolved end date
+        today: Reference date for relative presets (defaults to the current date)
+        fallback_beginning_of_week: Week start to use when the report does not
+            save one. The report's own setting always takes precedence, so that
+            a week-based preset covers the same days it does in the UI whoever
+            runs it.
     """
     if start_date and end_date:
         return {"from": start_date, "to": end_date}
 
     preferences = dashboard.preferences or {}
     date_period = preferences.get("datePeriod") or {}
-    if beginning_of_week is None:
-        # Toggl's own field name carries this typo.
-        beginning_of_week = preferences.get("begginingOfWeek", 1)
+
+    # Toggl's own field name carries this typo.
+    saved_beginning_of_week = preferences.get("begginingOfWeek")
+    if saved_beginning_of_week is not None:
+        beginning_of_week = saved_beginning_of_week
+    elif fallback_beginning_of_week is not None:
+        beginning_of_week = fallback_beginning_of_week
+    else:
+        beginning_of_week = 1
 
     resolved_from, resolved_to = resolve_period(
         date_period.get("preset"),
         today=today,
-        beginning_of_week=beginning_of_week if beginning_of_week is not None else 1,
+        beginning_of_week=beginning_of_week,
         custom_from=date_period.get("from") or start_date,
         custom_to=date_period.get("to") or end_date,
     )
@@ -293,6 +315,13 @@ def build_query(
         else:
             query.pop("ordinations", None)
 
+    # A saved chart can carry the page size the UI renders it with. Sending it
+    # would return one page and give the caller no way to tell that more rows
+    # exist, since the response carries no total count. Omitting pagination
+    # returns the whole result set: measured against a 7-month ungrouped query,
+    # 7,582 rows came back, matching count(time_entry_id) for the same window.
+    query.pop("pagination", None)
+
     query.pop("v3_query_params", None)
 
     return query, local_ordinations
@@ -338,9 +367,20 @@ def resolve_rows(
     return resolved
 
 
-def _sort_value(column: str, row: Dict[str, Any]) -> str:
+def _sort_value(column: str, row: Dict[str, Any]) -> Tuple[int, float, str]:
+    """Sort key that orders numbers numerically and everything else as text.
+
+    A dropped ordination is often on an aggregate column (`sum_duration`), so
+    comparing those as strings would put 900 before 1000. The leading rank keys
+    the two kinds apart, since a tuple of mixed types cannot be compared.
+    """
     value = row.get(column)
-    return "" if value is None else str(value).lower()
+    if value is None:
+        # Nulls are repositioned after the sort; this only has to be stable.
+        return (2, 0.0, "")
+    if isinstance(value, (int, float)):  # bool included, and ordered 0 before 1
+        return (0, float(value), "")
+    return (1, 0.0, str(value).lower())
 
 
 def sort_rows(
@@ -374,7 +414,9 @@ def summarise_rows(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     totals: Dict[str, Any] = {}
     for row in rows:
         for column, value in row.items():
-            if column.startswith(("sum_", "count")) and isinstance(value, (int, float)):
+            if (column.startswith("sum_") or column == "count") and isinstance(
+                value, (int, float)
+            ):
                 totals[column] = totals.get(column, 0) + value
     if "sum_duration" in totals:
         totals["sum_duration_seconds"] = int(totals["sum_duration"]) // 1000

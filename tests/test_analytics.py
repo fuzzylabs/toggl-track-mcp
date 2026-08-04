@@ -118,6 +118,24 @@ class TestPeriodForDashboard:
             "to": "2026-08-08",
         }
 
+    def test_saved_week_start_beats_the_callers(self):
+        """The report defines the week, whoever runs it."""
+        dashboard = TogglAnalyticsDashboard(
+            id=1,
+            preferences={"datePeriod": {"preset": "thisWeek"}, "begginingOfWeek": 0},
+        )
+        assert period_for_dashboard(
+            dashboard, today=TODAY, fallback_beginning_of_week=1
+        ) == {"from": "2026-08-02", "to": "2026-08-08"}
+
+    def test_fallback_week_start_used_when_report_saves_none(self):
+        dashboard = TogglAnalyticsDashboard(
+            id=1, preferences={"datePeriod": {"preset": "thisWeek"}}
+        )
+        assert period_for_dashboard(
+            dashboard, today=TODAY, fallback_beginning_of_week=0
+        ) == {"from": "2026-08-02", "to": "2026-08-08"}
+
     def test_saved_custom_range(self):
         dashboard = TogglAnalyticsDashboard(
             id=1,
@@ -222,6 +240,14 @@ class TestBuildQuery:
         assert "ordinations" not in query
         assert len(dropped) == 1
 
+    def test_pagination_removed(self):
+        """A saved page size would return one page with no way to detect more."""
+        chart = self._chart(pagination={"page": 1, "per_page": 50})
+
+        query, _ = build_query(TogglAnalyticsDashboard(id=1), chart, {"from": "a"})
+
+        assert "pagination" not in query
+
     def test_v3_query_params_removed(self):
         chart = self._chart(v3_query_params=None, groupings=[])
 
@@ -310,6 +336,31 @@ class TestSortRows:
 
         assert ordered[-1] == {"other": 1}
 
+    def test_numeric_columns_sort_numerically(self):
+        """Aggregates are the usual locally-sorted column; 900 is not > 1000."""
+        rows = [{"sum_duration": 900}, {"sum_duration": 1000}, {"sum_duration": 90}]
+
+        ordered = sort_rows(rows, [{"property": "sum_duration", "direction": "DESC"}])
+
+        assert [row["sum_duration"] for row in ordered] == [1000, 900, 90]
+
+    def test_numeric_ascending_with_nulls_last(self):
+        rows = [{"sum_duration": 1000}, {"other": 1}, {"sum_duration": 90}]
+
+        ordered = sort_rows(
+            rows,
+            [{"property": "sum_duration", "direction": "ASC", "nulls": "last"}],
+        )
+
+        assert [row.get("sum_duration") for row in ordered] == [90, 1000, None]
+
+    def test_mixed_types_do_not_raise(self):
+        rows = [{"value": 10}, {"value": "beta"}, {"value": 2}]
+
+        ordered = sort_rows(rows, [{"property": "value", "direction": "ASC"}])
+
+        assert [row["value"] for row in ordered] == [2, 10, "beta"]
+
     def test_unknown_column_is_ignored(self):
         rows = [{"client_name": "Zeta"}, {"client_name": "Alpha"}]
 
@@ -340,6 +391,11 @@ class TestSummariseRows:
         assert totals["sum_duration"] == 3500
         assert totals["count"] == 5
         assert totals["sum_duration_seconds"] == 3
+
+    def test_only_exact_count_column_is_totalled(self):
+        totals = summarise_rows([{"count": 2, "country": 7}])
+
+        assert totals == {"count": 2}
 
     def test_no_duration_column(self):
         assert summarise_rows([{"count": 1}]) == {"count": 1}

@@ -315,11 +315,17 @@ read-only — these tools never modify a report.
 - Custom reports are scoped to an organization, resolved from your default workspace
 - Set `TOGGL_WORKSPACE_ID` to the workspace whose organization owns the reports
 
-**A custom report returns no rows, or fewer than the Toggl UI shows**
+**A custom report returns no rows, or a different total to the Toggl UI**
 - Check the period in the response: a report saved with a relative period (`Last month`) resolves
   against today's date, so it moves as the month does. Pass `start_date` and `end_date` to pin it
+- Week-based periods (`This week`) follow the week start saved on the report, not your own
 - Reports you can only view (rather than edit) still run, but a chart belonging to someone else's
   report cannot be fetched on its own
+
+**"Quota exceeded" or custom reports failing after heavy use**
+- Report queries have their own hourly quota, around 240 queries, separate from the API rate limit
+- Each `run_custom_report` call spends one; run a report once and reuse the rows rather than
+  calling it per question
 
 **"Report uses a custom date range but has no dates saved"**
 - The report was saved with a custom period Toggl did not store dates for
