@@ -271,7 +271,7 @@ Custom reports are the multi-chart dashboards built in Toggl's **My Reports** se
 | `run_custom_report` | Runs one chart and returns its rows, with IDs resolved to names and durations in seconds |
 
 `run_custom_report` uses the report's own saved date period (`Last month`, `This quarter` and so on)
-unless you pass `start_date` and `end_date`. A report with several charts runs one at a time — pass
+unless you pass both `start_date` and `end_date`. A report with several charts runs one at a time — pass
 the `chart_id` from `get_custom_report` to pick a specific one, or omit it for the first chart.
 
 ### Example Custom Report Queries

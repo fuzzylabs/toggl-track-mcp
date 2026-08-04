@@ -1030,8 +1030,8 @@ async def run_custom_report(
     Args:
         report_id: Custom report ID (from list_custom_reports)
         chart_id: Chart to run (defaults to the report's first chart)
-        start_date: Override start date in YYYY-MM-DD format
-        end_date: Override end date in YYYY-MM-DD format
+        start_date: Override start date in YYYY-MM-DD format (requires end_date)
+        end_date: Override end date in YYYY-MM-DD format (requires start_date)
     """
     try:
         client = _get_toggl_client()

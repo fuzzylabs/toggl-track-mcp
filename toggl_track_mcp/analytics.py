@@ -227,19 +227,32 @@ def period_for_dashboard(
 ) -> Dict[str, str]:
     """Work out the date window to run a report over.
 
-    Explicit dates win; otherwise the report's saved preset is resolved.
+    A complete pair of explicit dates wins; otherwise the report's saved preset
+    is resolved.
 
     Args:
         dashboard: The report, whose preferences hold the preset and week start
-        start_date: Overrides the resolved start date
-        end_date: Overrides the resolved end date
+        start_date: Explicit start date, supplied together with ``end_date``
+        end_date: Explicit end date, supplied together with ``start_date``
         today: Reference date for relative presets (defaults to the current date)
         fallback_beginning_of_week: Week start to use when the report does not
             save one. The report's own setting always takes precedence, so that
             a week-based preset covers the same days it does in the UI whoever
             runs it.
     """
-    if start_date and end_date:
+    if (start_date is None) != (end_date is None):
+        raise ValueError("start_date and end_date must be provided together")
+
+    if start_date is not None and end_date is not None:
+        try:
+            parsed_start = date.fromisoformat(start_date)
+            parsed_end = date.fromisoformat(end_date)
+        except ValueError as error:
+            raise ValueError(
+                "start_date and end_date must use YYYY-MM-DD format"
+            ) from error
+        if parsed_start > parsed_end:
+            raise ValueError("start_date must be on or before end_date")
         return {"from": start_date, "to": end_date}
 
     preferences = dashboard.preferences or {}
@@ -301,18 +314,17 @@ def build_query(
     if groupings:
         query.pop("attributes", None)
 
-    # Sorts on a property that isn't grouped are applied locally instead.
+    # If any sort references an ungrouped property, apply the complete sequence
+    # locally. Splitting it between the API and a stable local sort would make a
+    # locally-applied secondary key override the remote primary key.
     local_ordinations: List[Dict[str, Any]] = []
     if query.get("ordinations"):
-        remote = []
-        for ordination in query["ordinations"]:
-            if ordination.get("property") in groupings:
-                remote.append(ordination)
-            else:
-                local_ordinations.append(ordination)
-        if remote:
-            query["ordinations"] = remote
-        else:
+        saved_ordinations = query["ordinations"]
+        if any(
+            ordination.get("property") not in groupings
+            for ordination in saved_ordinations
+        ):
+            local_ordinations = saved_ordinations
             query.pop("ordinations", None)
 
     # A saved chart can carry the page size the UI renders it with. Sending it

@@ -99,6 +99,34 @@ class TestPeriodForDashboard:
             dashboard, start_date="2026-01-01", end_date="2026-01-31"
         ) == {"from": "2026-01-01", "to": "2026-01-31"}
 
+    @pytest.mark.parametrize(
+        "start_date,end_date",
+        [("2026-01-01", None), (None, "2026-01-31")],
+    )
+    def test_explicit_dates_must_be_provided_together(self, start_date, end_date):
+        with pytest.raises(ValueError, match="must be provided together"):
+            period_for_dashboard(
+                TogglAnalyticsDashboard(id=1),
+                start_date=start_date,
+                end_date=end_date,
+            )
+
+    def test_explicit_dates_must_be_ordered(self):
+        with pytest.raises(ValueError, match="on or before"):
+            period_for_dashboard(
+                TogglAnalyticsDashboard(id=1),
+                start_date="2026-08-01",
+                end_date="2026-07-31",
+            )
+
+    def test_explicit_dates_must_be_valid_iso_dates(self):
+        with pytest.raises(ValueError, match="YYYY-MM-DD"):
+            period_for_dashboard(
+                TogglAnalyticsDashboard(id=1),
+                start_date="2026-02-30",
+                end_date="2026-03-01",
+            )
+
     def test_saved_preset_is_resolved(self):
         dashboard = TogglAnalyticsDashboard(
             id=1, preferences={"datePeriod": {"preset": "prevMonth"}}
@@ -211,12 +239,12 @@ class TestBuildQuery:
 
         assert query["attributes"] == [{"property": "duration"}]
 
-    def test_ordination_on_ungrouped_property_is_returned_for_local_sorting(self):
+    def test_mixed_ordinations_are_all_returned_for_local_sorting(self):
         chart = self._chart(
             groupings=[{"property": "client_id"}],
             ordinations=[
-                {"property": "client_name", "direction": "ASC"},
                 {"property": "client_id", "direction": "DESC"},
+                {"property": "client_name", "direction": "ASC"},
             ],
         )
 
@@ -224,8 +252,22 @@ class TestBuildQuery:
             TogglAnalyticsDashboard(id=1), chart, {"from": "a"}
         )
 
-        assert query["ordinations"] == [{"property": "client_id", "direction": "DESC"}]
-        assert dropped == [{"property": "client_name", "direction": "ASC"}]
+        assert "ordinations" not in query
+        assert dropped == [
+            {"property": "client_id", "direction": "DESC"},
+            {"property": "client_name", "direction": "ASC"},
+        ]
+
+    def test_grouped_ordinations_stay_remote(self):
+        ordinations = [{"property": "client_id", "direction": "DESC"}]
+        chart = self._chart(
+            groupings=[{"property": "client_id"}], ordinations=ordinations
+        )
+
+        query, local = build_query(TogglAnalyticsDashboard(id=1), chart, {"from": "a"})
+
+        assert query["ordinations"] == ordinations
+        assert local == []
 
     def test_all_ordinations_dropped_removes_the_key(self):
         chart = self._chart(
@@ -360,6 +402,27 @@ class TestSortRows:
         ordered = sort_rows(rows, [{"property": "value", "direction": "ASC"}])
 
         assert [row["value"] for row in ordered] == [2, 10, "beta"]
+
+    def test_multiple_ordinations_preserve_primary_key_priority(self):
+        rows = [
+            {"client_id": 2, "client_name": "Zeta"},
+            {"client_id": 1, "client_name": "Alpha"},
+            {"client_id": 2, "client_name": "Alpha"},
+        ]
+
+        ordered = sort_rows(
+            rows,
+            [
+                {"property": "client_id", "direction": "DESC"},
+                {"property": "client_name", "direction": "ASC"},
+            ],
+        )
+
+        assert [(row["client_id"], row["client_name"]) for row in ordered] == [
+            (2, "Alpha"),
+            (2, "Zeta"),
+            (1, "Alpha"),
+        ]
 
     def test_unknown_column_is_ignored(self):
         rows = [{"client_name": "Zeta"}, {"client_name": "Alpha"}]

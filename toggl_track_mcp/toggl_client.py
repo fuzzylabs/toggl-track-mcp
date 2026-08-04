@@ -3,7 +3,9 @@
 import asyncio
 import base64
 import logging
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Union
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
 from pydantic import BaseModel, ConfigDict
@@ -910,14 +912,24 @@ class TogglAPIClient:
         # setting wins over the caller's, so skip the /me call when both dates
         # are given.
         fallback_beginning_of_week = None
+        today: Optional[date] = None
         if not (start_date and end_date):
             user = await self.get_current_user()
             fallback_beginning_of_week = user.beginning_of_week
+            try:
+                today = datetime.now(ZoneInfo(user.timezone)).date()
+            except ZoneInfoNotFoundError:
+                logger.warning(
+                    "Unknown Toggl timezone %r; using the server's local date",
+                    user.timezone,
+                )
+                today = date.today()
 
         period = period_for_dashboard(
             dashboard,
             start_date=start_date,
             end_date=end_date,
+            today=today,
             fallback_beginning_of_week=fallback_beginning_of_week,
         )
 

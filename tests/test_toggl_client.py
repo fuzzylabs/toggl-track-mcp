@@ -1,8 +1,11 @@
 """Tests for Toggl API client."""
 
-import pytest
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
+from zoneinfo import ZoneInfo
+
 import httpx
+import pytest
 
 from toggl_track_mcp.toggl_client import (
     TogglAPIClient,
@@ -1301,6 +1304,36 @@ class TestAnalyticsAPI:
         period = result["period"]
         assert period["from"].endswith("-01")
         assert run.call_args.args[1]["period"] == period
+
+    @pytest.mark.asyncio
+    async def test_run_dashboard_chart_resolves_period_in_users_timezone(
+        self, client, dashboard_payload
+    ):
+        user = TogglUser(
+            id=123,
+            email="test@example.com",
+            fullname="Test",
+            timezone="Pacific/Honolulu",
+            default_workspace_id=456,
+            beginning_of_week=1,
+            created_at="2023-01-01T00:00:00Z",
+            updated_at="2023-01-01T00:00:00Z",
+        )
+        user_now = datetime(2026, 7, 31, 23, 30, tzinfo=ZoneInfo(user.timezone))
+
+        with patch.object(client, "get_current_user", return_value=user):
+            with patch("toggl_track_mcp.toggl_client.datetime") as datetime_mock:
+                datetime_mock.now.return_value = user_now
+                with patch.object(
+                    client, "run_analytics_query", return_value={"data_json_row": []}
+                ):
+                    result = await client.run_dashboard_chart(
+                        12345,
+                        dashboard=TogglAnalyticsDashboard(**dashboard_payload),
+                    )
+
+        datetime_mock.now.assert_called_once_with(ZoneInfo(user.timezone))
+        assert result["period"] == {"from": "2026-06-01", "to": "2026-06-30"}
 
     @pytest.mark.asyncio
     async def test_run_dashboard_chart_selects_requested_chart(
