@@ -1417,7 +1417,7 @@ async def test_add_project_user_success():
     mock_response = {
         "id": 9001,
         "project_id": 555,
-        "user_id": 12299621,
+        "user_id": 202,
         "workspace_id": 456,
         "manager": False,
     }
@@ -1427,18 +1427,18 @@ async def test_add_project_user_success():
         mock_api_client.add_project_user.return_value = mock_response
         mock_get_client.return_value = mock_api_client
 
-        result = await server.add_project_user.fn(project_id=555, user_id=12299621)
+        result = await server.add_project_user.fn(project_id=555, user_id=202)
 
         assert "error" not in result
         assert "project_user" in result
         assert result["project_user"]["project_id"] == 555
-        assert result["project_user"]["user_id"] == 12299621
-        assert "12299621" in result["message"]
+        assert result["project_user"]["user_id"] == 202
+        assert "202" in result["message"]
         assert "555" in result["message"]
 
         mock_api_client.add_project_user.assert_called_once_with(
             project_id=555,
-            user_id=12299621,
+            user_id=202,
             manager=False,
         )
 
@@ -1479,7 +1479,7 @@ async def test_add_project_user_error_handling():
     with patch("toggl_track_mcp.server._get_toggl_client") as mock_get_client:
         mock_get_client.side_effect = TogglAPIError("API Error")
 
-        result = await server.add_project_user.fn(project_id=555, user_id=12299621)
+        result = await server.add_project_user.fn(project_id=555, user_id=202)
 
         assert "error" in result
         assert result["error"] == "API Error"

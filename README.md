@@ -24,8 +24,8 @@ Transform how you work with your Toggl Track time tracking data by asking AI ass
 - *"Create a new time entry for 'Meeting with client'"* **(Write mode only)**
 - *"Start a timer for 'Working on feature X'"* **(Write mode only)**
 - *"Create a new client called 'Acme Corp' with the note 'Q3 SOW pending'"*
-- *"Create a new project AIaaS-200-3001 for client 47847188, billable, starting 2026-05-01, ending 2026-08-31, 120 estimated hours"*
-- *"Add Sam (user 11551609) and Tiffany (user 12299621) to project 213632529"*
+- *"Create a new project ACME-200-3001 for client 101, billable, starting 2026-05-01, ending 2026-08-31, 120 estimated hours"*
+- *"Add Alex (user 202) and Jordan (user 203) to project 3001"*
 
 **🔒 Secure by Default** — Read-only access with optional write mode via environment variable
 **🚀 Instant Setup** — Works with any MCP-compatible AI assistant  
