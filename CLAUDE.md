@@ -36,9 +36,10 @@ Behaviours that differ from the rest of the API, all handled in `analytics.py`:
 
 - Durations are in **milliseconds**, not seconds. `resolve_rows` adds a `*_seconds` column.
 - The query engine returns a 500 (not a validation error) for `attributes` alongside `groupings`,
-  and for an `ordination` on a property that isn't grouped. `build_query` strips both; dropped
-  ordinations are applied locally by `sort_rows`, which must order numbers numerically because
-  those sorts are usually on an aggregate column.
+  and for an `ordination` on a property that isn't grouped. `build_query` strips both. If any
+  ordination can't be sent, the **whole** sequence is applied locally by `sort_rows` — sorting part
+  of it remotely and the rest afterwards would let a secondary key override the primary. `sort_rows`
+  must order numbers numerically, because those sorts are usually on an aggregate column.
 - A saved chart's `pagination` is dropped, because a paginated response carries no total count and
   would look complete. Omitting it returns the whole result set.
 - Reports store a date **preset** (`prevMonth`, `thisQuarter`, …) rather than dates.

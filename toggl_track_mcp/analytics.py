@@ -15,7 +15,10 @@ Quirks of that API shape the code below:
   ``attributes`` alongside ``groupings``, and ``ordinations`` on a property that
   is not grouped (a ``client_name`` sort on a ``client_id`` grouping, for
   instance). Both return a 500 rather than a validation error, so
-  :func:`build_query` strips them and the ordering is applied locally instead.
+  :func:`build_query` strips them. When any ordination is unsendable the whole
+  sequence is applied locally by :func:`sort_rows`, because sorting part of it
+  remotely and the rest afterwards would let a secondary key override the
+  primary one.
 * A saved chart may carry the page size the UI renders it with, and a paginated
   response carries no total count. :func:`build_query` drops it so the whole
   result set comes back rather than a page that looks complete.
