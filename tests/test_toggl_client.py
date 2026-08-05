@@ -1,8 +1,11 @@
 """Tests for Toggl API client."""
 
-import pytest
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
+from zoneinfo import ZoneInfo
+
 import httpx
+import pytest
 
 from toggl_track_mcp.toggl_client import (
     TogglAPIClient,
@@ -15,6 +18,11 @@ from toggl_track_mcp.toggl_client import (
     TogglTag,
     TogglReportsResponse,
     TogglReportTimeEntry,
+)
+from toggl_track_mcp.analytics import (
+    ANALYTICS_BASE_URL,
+    TogglAnalyticsChart,
+    TogglAnalyticsDashboard,
 )
 
 
@@ -1100,3 +1108,393 @@ class TestCreateTimeEntry:
                     await client.create_time_entry("Test entry")
                 
                 assert "Invalid response format for created time entry" in str(exc_info.value)
+
+
+class TestAnalyticsAPI:
+    """Test the Analytics API methods behind custom reports."""
+
+    @pytest.fixture
+    def user(self):
+        return TogglUser(
+            id=123,
+            email="test@example.com",
+            fullname="Test",
+            timezone="UTC",
+            default_workspace_id=456,
+            beginning_of_week=1,
+            created_at="2023-01-01T00:00:00Z",
+            updated_at="2023-01-01T00:00:00Z",
+        )
+
+    @pytest.fixture
+    def dashboard_payload(self):
+        return {
+            "id": 12345,
+            "organization_id": 999,
+            "name": "Client time by team",
+            "preferences": {"datePeriod": {"preset": "prevMonth"}},
+            "filters": [
+                {
+                    "operator": "and",
+                    "value": None,
+                    "conditions": [
+                        {"property": "user_id", "operator": "in", "value": [7]}
+                    ],
+                }
+            ],
+            "chart_summary": {
+                "chart_details": [{"chart_type": "table", "chart_id": 51}]
+            },
+            "charts": [
+                {
+                    "id": 51,
+                    "type": "table",
+                    "query": {
+                        "groupings": [{"property": "client_id"}],
+                        "aggregations": [{"function": "sum", "property": "duration"}],
+                        "filters": [
+                            {"property": "workspace_id", "operator": "=", "value": 456}
+                        ],
+                    },
+                },
+                {
+                    "id": 52,
+                    "type": "bar",
+                    "query": {"groupings": [{"property": "day"}]},
+                },
+            ],
+        }
+
+    @pytest.mark.asyncio
+    async def test_get_organization_id(self, client, user):
+        workspaces = [TogglWorkspace(id=123, organization_id=999)]
+
+        with patch.object(client, "get_current_user", return_value=user):
+            with patch.object(client, "get_workspaces", return_value=workspaces):
+                assert await client.get_organization_id() == 999
+
+    @pytest.mark.asyncio
+    async def test_get_organization_id_not_found(self, client, user):
+        with patch.object(client, "get_current_user", return_value=user):
+            with patch.object(client, "get_workspaces", return_value=[]):
+                with pytest.raises(TogglAPIError) as exc_info:
+                    await client.get_organization_id()
+
+                assert "No organization found for workspace 123" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_list_dashboards(self, client, dashboard_payload):
+        with patch.object(
+            client, "_make_request", return_value=[dashboard_payload]
+        ) as request:
+            with patch.object(client, "get_organization_id", return_value=999):
+                dashboards = await client.list_dashboards()
+
+        assert len(dashboards) == 1
+        assert dashboards[0].name == "Client time by team"
+        assert request.call_args.kwargs["params"] == {"organization_id": 999}
+        assert request.call_args.kwargs["base_url"] == ANALYTICS_BASE_URL
+
+    @pytest.mark.asyncio
+    async def test_list_dashboards_only_pinned(self, client, dashboard_payload):
+        with patch.object(client, "_make_request", return_value=[]) as request:
+            await client.list_dashboards(organization_id=999, only_pinned=True)
+
+        assert request.call_args.kwargs["params"]["pinned"] == "true"
+
+    @pytest.mark.asyncio
+    async def test_list_dashboards_invalid_response(self, client):
+        with patch.object(client, "_make_request", return_value={}):
+            with pytest.raises(TogglAPIError) as exc_info:
+                await client.list_dashboards(organization_id=999)
+
+            assert "Invalid response format for custom reports" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_get_dashboard(self, client, dashboard_payload):
+        with patch.object(client, "_make_request", return_value=dashboard_payload):
+            dashboard = await client.get_dashboard(12345)
+
+        assert dashboard.id == 12345
+        assert len(dashboard.charts) == 2
+
+    @pytest.mark.asyncio
+    async def test_get_dashboard_invalid_response(self, client):
+        with patch.object(client, "_make_request", return_value=[]):
+            with pytest.raises(TogglAPIError) as exc_info:
+                await client.get_dashboard(1)
+
+            assert "Invalid response format for custom report" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_run_analytics_query(self, client):
+        with patch.object(
+            client, "_make_request", return_value={"data_json_row": []}
+        ) as request:
+            result = await client.run_analytics_query(999, {"period": {"from": "a"}})
+
+        assert result == {"data_json_row": []}
+        assert request.call_args.kwargs["params"] == {
+            "response_format": "json_row",
+            "include_dicts": "true",
+        }
+        assert request.call_args.args == ("POST", "/organizations/999/query")
+
+    @pytest.mark.asyncio
+    async def test_run_analytics_query_without_dicts(self, client):
+        with patch.object(client, "_make_request", return_value={}) as request:
+            await client.run_analytics_query(999, {}, include_dicts=False)
+
+        assert request.call_args.kwargs["params"]["include_dicts"] == "false"
+
+    @pytest.mark.asyncio
+    async def test_run_analytics_query_invalid_response(self, client):
+        with patch.object(client, "_make_request", return_value=[]):
+            with pytest.raises(TogglAPIError) as exc_info:
+                await client.run_analytics_query(999, {})
+
+            assert "Invalid response format for analytics query" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_run_dashboard_chart_defaults_to_first_chart(
+        self, client, user, dashboard_payload
+    ):
+        query_response = {
+            "data_json_row": [{"client_id": 1, "sum_duration": 7200000}],
+            "dictionaries": {"clients": {"1": {"id": 1, "name": "Acme Corp"}}},
+        }
+
+        with patch.object(client, "get_current_user", return_value=user):
+            with patch.object(
+                client,
+                "get_dashboard",
+                return_value=TogglAnalyticsDashboard(**dashboard_payload),
+            ):
+                with patch.object(
+                    client, "run_analytics_query", return_value=query_response
+                ) as run:
+                    result = await client.run_dashboard_chart(
+                        12345, start_date="2026-07-01", end_date="2026-07-31"
+                    )
+
+        assert result["chart_id"] == 51
+        assert result["period"] == {"from": "2026-07-01", "to": "2026-07-31"}
+        assert result["rows"][0]["client_name"] == "Acme Corp"
+        assert result["totals"]["sum_duration_seconds"] == 7200
+
+        sent_query = run.call_args.args[1]
+        assert sent_query["filters"][-1] == dashboard_payload["filters"][0]
+
+    @pytest.mark.asyncio
+    async def test_run_dashboard_chart_resolves_saved_period(
+        self, client, user, dashboard_payload
+    ):
+        with patch.object(client, "get_current_user", return_value=user):
+            with patch.object(
+                client,
+                "get_dashboard",
+                return_value=TogglAnalyticsDashboard(**dashboard_payload),
+            ):
+                with patch.object(
+                    client, "run_analytics_query", return_value={"data_json_row": []}
+                ) as run:
+                    result = await client.run_dashboard_chart(12345)
+
+        # prevMonth resolves to a full calendar month
+        period = result["period"]
+        assert period["from"].endswith("-01")
+        assert run.call_args.args[1]["period"] == period
+
+    @pytest.mark.asyncio
+    async def test_run_dashboard_chart_resolves_period_in_users_timezone(
+        self, client, dashboard_payload
+    ):
+        user = TogglUser(
+            id=123,
+            email="test@example.com",
+            fullname="Test",
+            timezone="Pacific/Honolulu",
+            default_workspace_id=456,
+            beginning_of_week=1,
+            created_at="2023-01-01T00:00:00Z",
+            updated_at="2023-01-01T00:00:00Z",
+        )
+        user_now = datetime(2026, 7, 31, 23, 30, tzinfo=ZoneInfo(user.timezone))
+
+        with patch.object(client, "get_current_user", return_value=user):
+            with patch("toggl_track_mcp.toggl_client.datetime") as datetime_mock:
+                datetime_mock.now.return_value = user_now
+                with patch.object(
+                    client, "run_analytics_query", return_value={"data_json_row": []}
+                ):
+                    result = await client.run_dashboard_chart(
+                        12345,
+                        dashboard=TogglAnalyticsDashboard(**dashboard_payload),
+                    )
+
+        datetime_mock.now.assert_called_once_with(ZoneInfo(user.timezone))
+        assert result["period"] == {"from": "2026-06-01", "to": "2026-06-30"}
+
+    @pytest.mark.asyncio
+    async def test_run_dashboard_chart_selects_requested_chart(
+        self, client, user, dashboard_payload
+    ):
+        with patch.object(client, "get_current_user", return_value=user):
+            with patch.object(
+                client, "run_analytics_query", return_value={"data_json_row": []}
+            ):
+                result = await client.run_dashboard_chart(
+                    12345,
+                    chart_id=52,
+                    dashboard=TogglAnalyticsDashboard(**dashboard_payload),
+                )
+
+        assert result["chart_id"] == 52
+        assert result["chart_type"] == "bar"
+
+    @pytest.mark.asyncio
+    async def test_run_dashboard_chart_unknown_chart(
+        self, client, user, dashboard_payload
+    ):
+        with patch.object(
+            client,
+            "get_dashboard",
+            return_value=TogglAnalyticsDashboard(**dashboard_payload),
+        ):
+            with pytest.raises(TogglAPIError) as exc_info:
+                await client.run_dashboard_chart(12345, chart_id=99)
+
+            assert "Chart 99 is not part of custom report" in str(exc_info.value)
+            assert "51, 52" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_run_dashboard_chart_without_charts(self, client):
+        with patch.object(
+            client, "get_dashboard", return_value=TogglAnalyticsDashboard(id=1)
+        ):
+            with pytest.raises(TogglAPIError) as exc_info:
+                await client.run_dashboard_chart(1)
+
+            assert "has no charts" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_run_dashboard_chart_resolves_organization(self, client, user):
+        dashboard = TogglAnalyticsDashboard(
+            id=1, charts=[TogglAnalyticsChart(id=51, type="table", query={})]
+        )
+
+        with patch.object(client, "get_current_user", return_value=user):
+            with patch.object(client, "get_organization_id", return_value=999) as org:
+                with patch.object(
+                    client, "run_analytics_query", return_value={}
+                ) as run:
+                    await client.run_dashboard_chart(
+                        1,
+                        start_date="2026-07-01",
+                        end_date="2026-07-31",
+                        dashboard=dashboard,
+                    )
+
+        org.assert_awaited_once()
+        assert run.call_args.args[0] == 999
+
+    @pytest.mark.asyncio
+    async def test_run_dashboard_chart_skips_user_lookup_for_explicit_dates(
+        self, client, dashboard_payload
+    ):
+        """Only a relative preset needs the caller's week start."""
+        dashboard = TogglAnalyticsDashboard(**dashboard_payload)
+
+        with patch.object(client, "get_current_user") as user_lookup:
+            with patch.object(client, "run_analytics_query", return_value={}):
+                await client.run_dashboard_chart(
+                    12345,
+                    start_date="2026-07-01",
+                    end_date="2026-07-31",
+                    dashboard=dashboard,
+                )
+
+        user_lookup.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_run_dashboard_chart_uses_reports_own_week_start(self, client, user):
+        """A week-based preset covers the report's week, not the caller's."""
+        dashboard = TogglAnalyticsDashboard(
+            id=1,
+            organization_id=999,
+            preferences={"datePeriod": {"preset": "thisWeek"}, "begginingOfWeek": 0},
+            charts=[TogglAnalyticsChart(id=51, type="bar", query={})],
+        )
+
+        with patch.object(client, "get_current_user", return_value=user):
+            with patch.object(client, "run_analytics_query", return_value={}) as run:
+                result = await client.run_dashboard_chart(1, dashboard=dashboard)
+
+        # user.beginning_of_week is 1 (Monday); the report says 0 (Sunday)
+        from datetime import date, timedelta
+
+        expected_start = date.today() - timedelta(days=(date.today().weekday() + 1) % 7)
+        assert result["period"]["from"] == expected_start.isoformat()
+        assert run.call_args.args[1]["period"] == result["period"]
+
+    @pytest.mark.asyncio
+    async def test_get_organization_id_is_cached(self, client, user):
+        workspaces = [TogglWorkspace(id=123, organization_id=999)]
+
+        with patch.object(client, "get_current_user", return_value=user) as user_lookup:
+            with patch.object(client, "get_workspaces", return_value=workspaces):
+                assert await client.get_organization_id() == 999
+                assert await client.get_organization_id() == 999
+
+        user_lookup.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_get_organization_id_explicit_workspace_is_not_cached(self, client):
+        workspaces = [
+            TogglWorkspace(id=123, organization_id=999),
+            TogglWorkspace(id=456, organization_id=888),
+        ]
+
+        with patch.object(client, "get_workspaces", return_value=workspaces):
+            assert await client.get_organization_id(workspace_id=456) == 888
+
+        assert client._organization_id is None
+
+
+class TestClientErrorsAreNotRetried:
+    """A 4xx will fail identically on retry, so it should surface immediately."""
+
+    @pytest.mark.asyncio
+    async def test_client_error_raises_without_retrying(self, client):
+        request = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                "Error",
+                request=MagicMock(),
+                response=MagicMock(status_code=403, text="Forbidden"),
+            )
+        )
+        with patch("httpx.AsyncClient") as mock_httpx:
+            mock_httpx.return_value.__aenter__.return_value.request = request
+
+            with pytest.raises(TogglAPIError) as exc_info:
+                await client._make_request("GET", "/test")
+
+        assert exc_info.value.status_code == 403
+        assert request.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_server_error_still_retries(self, client):
+        request = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                "Error",
+                request=MagicMock(),
+                response=MagicMock(status_code=500, text="Server Error"),
+            )
+        )
+        with patch("httpx.AsyncClient") as mock_httpx:
+            mock_httpx.return_value.__aenter__.return_value.request = request
+            with patch("asyncio.sleep", new=AsyncMock()):
+                with pytest.raises(TogglAPIError):
+                    await client._make_request("GET", "/test", retries=2)
+
+        assert request.await_count == 3

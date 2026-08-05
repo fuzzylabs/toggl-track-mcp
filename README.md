@@ -18,11 +18,14 @@ Transform how you work with your Toggl Track time tracking data by asking AI ass
 - *"Show me team time entries for the past month"* **(Admin only)**
 - *"Generate a team summary grouped by users"* **(Admin only)**
 - *"List all workspace users and their IDs"* **(Admin only)**
+- *"List our saved custom reports"*
+- *"Run the 'Client time by team' custom report for June"*
+- *"What does the client time custom report measure?"*
 - *"Create a new time entry for 'Meeting with client'"* **(Write mode only)**
 - *"Start a timer for 'Working on feature X'"* **(Write mode only)**
 - *"Create a new client called 'Acme Corp' with the note 'Q3 SOW pending'"*
-- *"Create a new project AIaaS-200-3001 for client 47847188, billable, starting 2026-05-01, ending 2026-08-31, 120 estimated hours"*
-- *"Add Sam (user 11551609) and Tiffany (user 12299621) to project 213632529"*
+- *"Create a new project ACME-200-3001 for client 101, billable, starting 2026-05-01, ending 2026-08-31, 120 estimated hours"*
+- *"Add Alex (user 202) and Jordan (user 203) to project 3001"*
 
 **🔒 Secure by Default** — Read-only access with optional write mode via environment variable
 **🚀 Instant Setup** — Works with any MCP-compatible AI assistant  
@@ -222,6 +225,7 @@ This MCP server provides **complete access** to your Toggl Track data:
 | **🏢 Workspaces** | View available workspaces and permissions |
 | **🏷️ Tags** | Browse all tags for categorization |
 | **📈 Analytics** | Generate time summaries, breakdowns, reports |
+| **📋 Custom Reports** | List saved "My Reports" dashboards, read their definitions, and run them for any date range |
 | **👥 Team Reports** | **(Admin only)** Access team-wide time entries, summaries, and user data |
 | **🔍 Workspace Users** | **(Admin only)** List all workspace members with IDs for filtering |
 
@@ -255,6 +259,31 @@ Try these with admin permissions:
 
 **⚠️ Important**: Team features only work if your Toggl Track account has workspace admin permissions. Regular users will receive appropriate error messages when attempting to access team data.
 
+## Custom Reports
+
+Custom reports are the multi-chart dashboards built in Toggl's **My Reports** section — the ones at
+`track.toggl.com/reports/{organization_id}/custom/{report_id}`. Three tools cover them:
+
+| **Tool** | **What it does** |
+|---|---|
+| `list_custom_reports` | Lists the organization's saved reports with their IDs, chart types and saved date period |
+| `get_custom_report` | Shows a report's definition: each chart's groupings, aggregations and filters |
+| `run_custom_report` | Runs one chart and returns its rows, with IDs resolved to names and durations in seconds |
+
+`run_custom_report` uses the report's own saved date period (`Last month`, `This quarter` and so on)
+unless you pass both `start_date` and `end_date`. A report with several charts runs one at a time — pass
+the `chart_id` from `get_custom_report` to pick a specific one, or omit it for the first chart.
+
+### Example Custom Report Queries
+- *"List our custom reports"*
+- *"Run custom report 12345 for July 2026"*
+- *"Which clients did the engineering team log time against last month?"*
+
+**⚠️ Unofficial API**: Toggl serves custom reports from an `analytics` API that is not part of its
+published API documentation. It authenticates with the same API token, and the endpoints were
+verified against the live API, but Toggl can change them without notice. Everything here is
+read-only — these tools never modify a report.
+
 ## Troubleshooting
 
 ### Common Issues
@@ -281,6 +310,26 @@ Try these with admin permissions:
 - Team features require workspace admin permissions in Toggl Track
 - Check your role: Profile Settings → Workspaces → your workspace → check if you're an admin
 - Contact your workspace owner to grant admin access if needed
+
+**Custom reports return "No organization found for workspace"**
+- Custom reports are scoped to an organization, resolved from your default workspace
+- Set `TOGGL_WORKSPACE_ID` to the workspace whose organization owns the reports
+
+**A custom report returns no rows, or a different total to the Toggl UI**
+- Check the period in the response: a report saved with a relative period (`Last month`) resolves
+  against today's date, so it moves as the month does. Pass `start_date` and `end_date` to pin it
+- Week-based periods (`This week`) follow the week start saved on the report, not your own
+- Reports you can only view (rather than edit) still run, but a chart belonging to someone else's
+  report cannot be fetched on its own
+
+**"Quota exceeded" or custom reports failing after heavy use**
+- Report queries have their own hourly quota, around 240 queries, separate from the API rate limit
+- Each `run_custom_report` call spends one; run a report once and reuse the rows rather than
+  calling it per question
+
+**"Report uses a custom date range but has no dates saved"**
+- The report was saved with a custom period Toggl did not store dates for
+- Pass `start_date` and `end_date` to `run_custom_report`
 
 **MCP tools not showing in your AI assistant**
 - Restart your AI assistant after config changes

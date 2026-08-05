@@ -14,13 +14,43 @@ This is a Model Context Protocol (MCP) server that exposes Toggl Track time trac
 - **Time Entries API**: Individual user time tracking data
 - **Reports API**: Team-wide time entries and summaries (admin access required)
 - **Workspace API**: Projects, clients, tags, and user management
+- **Analytics API**: Saved custom reports ("My Reports" dashboards) — see below
 
 ### Core Components
 
 - **`toggl_track_mcp/server.py`**: Main MCP server with FastMCP framework and FastAPI backend
 - **`toggl_track_mcp/toggl_client.py`**: Centralized Toggl API client with rate limiting and typed models
+- **`toggl_track_mcp/analytics.py`**: Models and pure helpers for the Analytics API (custom reports)
 - **`toggl_track_mcp/rate_limiter.py`**: Token bucket rate limiter for API requests
 - **`tests/`**: Test suite for server functionality and rate limiting
+
+### Analytics API (Custom Reports)
+
+Custom reports are organization-scoped dashboards served from
+`https://api.track.toggl.com/analytics/api`, not from the v9 or Reports v3 APIs. That API is
+undocumented — the endpoints were read out of the Toggl web app's own API client and verified
+against the live API — so keep it isolated behind `analytics.py` and `TogglAPIClient`'s
+`list_dashboards` / `get_dashboard` / `run_analytics_query` / `run_dashboard_chart` methods.
+
+Behaviours that differ from the rest of the API, all handled in `analytics.py`:
+
+- Durations are in **milliseconds**, not seconds. `resolve_rows` adds a `*_seconds` column.
+- The query engine returns a 500 (not a validation error) for `attributes` alongside `groupings`,
+  and for an `ordination` on a property that isn't grouped. `build_query` strips both. If any
+  ordination can't be sent, the **whole** sequence is applied locally by `sort_rows` — sorting part
+  of it remotely and the rest afterwards would let a secondary key override the primary. `sort_rows`
+  must order numbers numerically, because those sorts are usually on an aggregate column.
+- A saved chart's `pagination` is dropped, because a paginated response carries no total count and
+  would look complete. Omitting it returns the whole result set.
+- Reports store a date **preset** (`prevMonth`, `thisQuarter`, …) rather than dates.
+  `resolve_period` mirrors the web app's preset definitions so a run covers the same days the UI
+  does. For week-based presets the **report's** saved week start wins over the caller's, which is
+  only a fallback.
+- Report queries carry their own hourly quota (`x-toggl-quota-remaining`, ~240/hour). Don't spend
+  requests you don't need — `run_dashboard_chart` skips the `/me` lookup when given explicit dates,
+  and the resolved organization id is cached on the client.
+
+`_make_request` takes a `base_url` override for this API; don't add a third copy of the httpx block.
 
 ### Tool Structure
 

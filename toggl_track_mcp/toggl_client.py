@@ -3,11 +3,23 @@
 import asyncio
 import base64
 import logging
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Union
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
 from pydantic import BaseModel, ConfigDict
 
+from .analytics import (
+    ANALYTICS_BASE_URL,
+    TogglAnalyticsChart,
+    TogglAnalyticsDashboard,
+    build_query,
+    period_for_dashboard,
+    resolve_rows,
+    sort_rows,
+    summarise_rows,
+)
 from .rate_limiter import TokenBucketRateLimiter
 
 logger = logging.getLogger(__name__)
@@ -218,6 +230,7 @@ class TogglAPIClient:
         self.base_url = base_url.rstrip("/")
         self.workspace_id = workspace_id
         self.rate_limiter = TokenBucketRateLimiter(requests_per_second, burst_size)
+        self._organization_id: Optional[int] = None
 
         # Create auth header
         auth_string = f"{api_token}:api_token"
@@ -232,6 +245,7 @@ class TogglAPIClient:
         params: Optional[Dict[str, Any]] = None,
         json_data: Optional[Dict[str, Any]] = None,
         retries: int = 3,
+        base_url: Optional[str] = None,
     ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         """Make an authenticated request to the Toggl API.
 
@@ -241,6 +255,8 @@ class TogglAPIClient:
             params: Query parameters
             json_data: JSON body data
             retries: Number of retries for rate limiting
+            base_url: Override the client's base URL (used for the Analytics API,
+                which is served from a different path than the v9 API)
 
         Returns:
             Response data as dict or list
@@ -250,7 +266,7 @@ class TogglAPIClient:
         """
         await self.rate_limiter.acquire()
 
-        url = f"{self.base_url}/{endpoint.lstrip('/')}"
+        url = f"{(base_url or self.base_url).rstrip('/')}/{endpoint.lstrip('/')}"
         headers = {
             "Authorization": self.auth_header,
             "Content-Type": "application/json",
@@ -298,7 +314,11 @@ class TogglAPIClient:
                     return result  # type: ignore[no-any-return]
 
             except httpx.HTTPStatusError as e:
-                if attempt == retries:
+                # A 4xx is the server rejecting the request itself (bad payload,
+                # no permission, no such resource) and will fail identically on
+                # retry, so surface it rather than backing off three times.
+                is_client_error = 400 <= e.response.status_code < 500
+                if attempt == retries or is_client_error:
                     error_msg = f"HTTP {e.response.status_code}: {e.response.text}"
                     raise TogglAPIError(error_msg, status_code=e.response.status_code)
                 await asyncio.sleep(2**attempt)  # Exponential backoff
@@ -758,3 +778,180 @@ class TogglAPIClient:
                 except Exception:
                     error_msg += f" - {response.text}"
                 raise TogglAPIError(error_msg, response.status_code)
+
+    # Analytics API Methods (Custom Reports)
+    #
+    # Custom reports are organization-scoped dashboards. See analytics.py for
+    # what this API is and why it needs handling of its own.
+
+    async def get_organization_id(self, workspace_id: Optional[int] = None) -> int:
+        """Get the organization ID that owns a workspace.
+
+        Custom reports are scoped to an organization, not a workspace, but the
+        workspace is what callers usually have to hand. Resolving it costs two
+        requests, so the default workspace's organization is cached.
+        """
+        if not workspace_id and self._organization_id is not None:
+            return self._organization_id
+
+        requested_id = workspace_id
+        if not workspace_id:
+            user = await self.get_current_user()
+            workspace_id = self.workspace_id or user.default_workspace_id
+
+        for workspace in await self.get_workspaces():
+            if workspace.id == workspace_id and workspace.organization_id:
+                if requested_id is None:
+                    self._organization_id = workspace.organization_id
+                return workspace.organization_id
+
+        raise TogglAPIError(f"No organization found for workspace {workspace_id}")
+
+    async def list_dashboards(
+        self,
+        organization_id: Optional[int] = None,
+        only_pinned: bool = False,
+    ) -> List[TogglAnalyticsDashboard]:
+        """List the custom reports in an organization.
+
+        Args:
+            organization_id: Organization ID (resolved from the workspace if omitted)
+            only_pinned: Return only reports pinned to the sidebar
+        """
+        if not organization_id:
+            organization_id = await self.get_organization_id()
+
+        params: Dict[str, Any] = {"organization_id": organization_id}
+        if only_pinned:
+            params["pinned"] = "true"
+
+        data = await self._make_request(
+            "GET", "/dashboards", params=params, base_url=ANALYTICS_BASE_URL
+        )
+        if isinstance(data, list):
+            return [TogglAnalyticsDashboard(**dashboard) for dashboard in data]
+        raise TogglAPIError("Invalid response format for custom reports")
+
+    async def get_dashboard(self, dashboard_id: int) -> TogglAnalyticsDashboard:
+        """Get a custom report's full definition, including its charts."""
+        data = await self._make_request(
+            "GET", f"/dashboards/{dashboard_id}", base_url=ANALYTICS_BASE_URL
+        )
+        if isinstance(data, dict):
+            return TogglAnalyticsDashboard(**data)
+        raise TogglAPIError("Invalid response format for custom report")
+
+    async def run_analytics_query(
+        self,
+        organization_id: int,
+        query: Dict[str, Any],
+        include_dicts: bool = True,
+    ) -> Dict[str, Any]:
+        """Run a query against the analytics engine.
+
+        Args:
+            organization_id: Organization the query runs against
+            query: Query payload (period, groupings, aggregations, filters)
+            include_dicts: Ask for the id-to-name dictionaries alongside the rows
+        """
+        data = await self._make_request(
+            "POST",
+            f"/organizations/{organization_id}/query",
+            params={
+                "response_format": "json_row",
+                "include_dicts": "true" if include_dicts else "false",
+            },
+            json_data=query,
+            base_url=ANALYTICS_BASE_URL,
+        )
+        if isinstance(data, dict):
+            return data
+        raise TogglAPIError("Invalid response format for analytics query")
+
+    async def run_dashboard_chart(
+        self,
+        dashboard_id: int,
+        chart_id: Optional[int] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        dashboard: Optional[TogglAnalyticsDashboard] = None,
+    ) -> Dict[str, Any]:
+        """Run one chart of a custom report and return its rows.
+
+        Reproduces what the report shows: the chart's saved query, the
+        report-level filters, and either the report's saved period or the dates
+        given here.
+
+        Args:
+            dashboard_id: Custom report ID
+            chart_id: Chart to run (defaults to the report's first chart)
+            start_date: Override start date (YYYY-MM-DD)
+            end_date: Override end date (YYYY-MM-DD)
+            dashboard: Already-fetched report, to save a round trip
+        """
+        if dashboard is None:
+            dashboard = await self.get_dashboard(dashboard_id)
+
+        charts: List[TogglAnalyticsChart] = dashboard.charts or []
+        if not charts:
+            raise TogglAPIError(f"Custom report {dashboard_id} has no charts")
+
+        if chart_id is None:
+            chart = charts[0]
+        else:
+            matches = [chart for chart in charts if chart.id == chart_id]
+            if not matches:
+                available = ", ".join(str(chart.id) for chart in charts)
+                raise TogglAPIError(
+                    f"Chart {chart_id} is not part of custom report "
+                    f"{dashboard_id} (charts: {available})"
+                )
+            chart = matches[0]
+
+        # Only a relative preset needs a week start, and the report's own
+        # setting wins over the caller's, so skip the /me call when both dates
+        # are given.
+        fallback_beginning_of_week = None
+        today: Optional[date] = None
+        if not (start_date and end_date):
+            user = await self.get_current_user()
+            fallback_beginning_of_week = user.beginning_of_week
+            try:
+                today = datetime.now(ZoneInfo(user.timezone)).date()
+            except ZoneInfoNotFoundError:
+                logger.warning(
+                    "Unknown Toggl timezone %r; using the server's local date",
+                    user.timezone,
+                )
+                today = date.today()
+
+        period = period_for_dashboard(
+            dashboard,
+            start_date=start_date,
+            end_date=end_date,
+            today=today,
+            fallback_beginning_of_week=fallback_beginning_of_week,
+        )
+
+        query, local_ordinations = build_query(dashboard, chart, period)
+
+        organization_id = dashboard.organization_id
+        if not organization_id:
+            organization_id = await self.get_organization_id()
+
+        response = await self.run_analytics_query(organization_id, query)
+        rows = resolve_rows(
+            response.get("data_json_row") or [], response.get("dictionaries")
+        )
+        rows = sort_rows(rows, local_ordinations)
+
+        return {
+            "report_id": dashboard_id,
+            "report_name": dashboard.name,
+            "chart_id": chart.id,
+            "chart_type": chart.type,
+            "period": period,
+            "rows": rows,
+            "totals": summarise_rows(rows),
+            "query": query,
+        }
