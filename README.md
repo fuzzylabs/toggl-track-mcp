@@ -1,6 +1,6 @@
 # Toggl Track MCP Server
 
-> **Connect your Toggl Track time tracking data to AI assistants** — Access time entries, projects, clients, and analytics through natural language queries, with secure-by-default read-only access and optional write capabilities.
+> **Connect your Toggl Track time tracking data to AI assistants** — Access time entries, projects, clients, and analytics through natural language queries, and create entries, projects and clients.
 
 [![Model Context Protocol](https://img.shields.io/badge/MCP-Compatible-blue)](https://modelcontextprotocol.io) [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-green)](https://python.org) [![Toggl Track API v9](https://img.shields.io/badge/Toggl%20Track-API%20v9-red)](https://developers.track.toggl.com)
 
@@ -21,13 +21,13 @@ Transform how you work with your Toggl Track time tracking data by asking AI ass
 - *"List our saved custom reports"*
 - *"Run the 'Client time by team' custom report for June"*
 - *"What does the client time custom report measure?"*
-- *"Create a new time entry for 'Meeting with client'"* **(Write mode only)**
-- *"Start a timer for 'Working on feature X'"* **(Write mode only)**
+- *"Create a new time entry for 'Meeting with client'"* **(writes to your workspace)**
+- *"Start a timer for 'Working on feature X'"* **(writes to your workspace)**
 - *"Create a new client called 'Acme Corp' with the note 'Q3 SOW pending'"*
 - *"Create a new project ACME-200-3001 for client 101, billable, starting 2026-05-01, ending 2026-08-31, 120 estimated hours"*
 - *"Add Alex (user 202) and Jordan (user 203) to project 3001"*
 
-**🔒 Secure by Default** — Read-only access with optional write mode via environment variable
+**🔑 One credential** — a Toggl API token, whose own permissions are the only boundary
 **🚀 Instant Setup** — Works with any MCP-compatible AI assistant  
 **📊 Complete Coverage** — Access time entries, projects, clients, analytics & more  
 **👥 Team Reports** — Admin users can access team-wide time tracking data
@@ -90,8 +90,7 @@ Add this to your Claude Desktop config file:
         "toggl_track_mcp"
       ],
       "env": {
-        "TOGGL_API_TOKEN": "your_toggl_api_token_here",
-        "TOGGL_WRITE_ENABLED": "false"
+        "TOGGL_API_TOKEN": "your_toggl_api_token_here"
       }
     }
   }
@@ -132,8 +131,7 @@ Or manually add this to your Cursor MCP settings:
       "toggl_track_mcp"
     ],
     "env": {
-      "TOGGL_API_TOKEN": "your_toggl_api_token_here",
-      "TOGGL_WRITE_ENABLED": "false"
+      "TOGGL_API_TOKEN": "your_toggl_api_token_here"
     }
   }
 }
@@ -165,33 +163,19 @@ Try these example queries:
 > *"Show me team time entries for this month"* **(Admin only)**  
 > *"List all workspace users"* **(Admin only)**
 
-## Write Mode (Optional)
+## Write Operations
 
-By default, the MCP server operates in **read-only mode** for security. To enable time entry creation, set the `TOGGL_WRITE_ENABLED` environment variable:
-
-### Enabling Write Mode
-
-Update your MCP configuration to include:
-
-```json
-"env": {
-  "TOGGL_API_TOKEN": "your_toggl_api_token_here",
-  "TOGGL_WRITE_ENABLED": "true"
-}
-```
-
-### Write Operations Available
-
-When write mode is enabled, you can:
+The server exposes tools that create data in your workspace. They are **always available** —
+there is no separate switch, so any client you connect can call them:
 
 - **Create running time entries** - Start new timers with just a description
 - **Create completed time entries** - Add past work with specific durations
-- **Assign to projects** - Link time entries to existing projects
-- **Set billable status** - Mark entries as billable or non-billable  
-- **Add tags** - Categorize entries with comma-separated tags
-- **Custom start times** - Backdate entries to specific times
+- **Create projects** - With client, colour, billable flag, dates and estimated hours
+- **Create clients** - With optional notes
+- **Add users to projects** - Optionally as project manager
+- **Assign entries to projects**, set billable status, add tags, backdate start times
 
-### Example Write Mode Queries
+### Example Write Queries
 
 ```
 "Create a new time entry for 'Client meeting'"
@@ -202,10 +186,14 @@ When write mode is enabled, you can:
 
 ### Security Notes
 
-- **Environment-gated**: Write operations are completely disabled unless explicitly enabled
-- **No data modification**: Only supports creating new time entries, no editing/deleting
-- **Audit trail**: All created entries include 'toggl-track-mcp' identifier for tracking
+- **⚠️ Your token is the only boundary.** A Toggl API token carries your full account
+  permissions, and this server does not restrict what an AI client may do with it. Assume any
+  client you connect can create time entries, projects and clients in your live workspace
+- **No editing or deleting**: The tools only create records; nothing updates or removes existing
+  data, so a mistaken call is undone in the Toggl UI
+- **Attribution**: New time entries are sent with `created_with: toggl-track-mcp`
 - **API rate limits**: Respects Toggl's rate limiting to prevent abuse
+- **Custom reports are read-only**: The report tools never modify a report
 
 ## What You Can Access
 
@@ -216,7 +204,7 @@ This MCP server provides **complete access** to your Toggl Track data:
 | **👤 User Info** | View profile, workspace, timezone settings |
 | **⏱️ Current Timer** | Check running time entry, duration, description |
 | **📊 Time Entries** | List, search, filter by date, project, tags |
-| **✏️ Create Entries** | **(Write mode only)** Create new time entries, start/stop timers |
+| **✏️ Create Entries** | Create new time entries, start timers |
 | **📂 Projects** | View project details, status, client assignments |
 | **🆕 Create Projects** | Create new projects with client, color, billable, dates, and estimated hours |
 | **👥 Clients** | Access client information and relationships |
@@ -337,14 +325,13 @@ read-only — these tools never modify a report.
 - Verify file paths are absolute, not relative
 
 **Write operations not working**
-- Check that `TOGGL_WRITE_ENABLED=true` is set in your environment variables
-- Restart your AI assistant after adding the environment variable
-- Verify you have permissions to create time entries in your Toggl workspace
+- Verify you have permissions to create time entries, projects or clients in your Toggl workspace
+- Check the error returned by the tool: Toggl rejects a create with a 400 and an explanation
 
-**"Write operations are disabled" error**
-- The `create_time_entry` tool requires `TOGGL_WRITE_ENABLED=true`
-- This is a security feature to prevent accidental time entry creation
-- Update your MCP configuration to include the environment variable
+**An AI client created something you didn't want**
+- Nothing gates the create tools, so this is expected behaviour rather than a bug
+- Delete the record in the Toggl UI, and only connect this server to clients you trust with your
+  workspace
 
 ### Getting Help
 
@@ -378,7 +365,6 @@ Want to deploy the MCP server remotely so multiple users can access it via HTTP?
 5. **Set environment variables** in Render dashboard:
    - `TOGGL_API_TOKEN`: Your Toggl Track API token
    - `MCP_API_KEY`: A secure random API key for authentication (see generation instructions below)
-   - `TOGGL_WRITE_ENABLED`: Set to `"true"` to enable time entry creation (optional, defaults to `"false"`)
 
 6. **Deploy** - Render will automatically build and deploy your service
 
@@ -461,7 +447,6 @@ curl -X POST https://your-service.onrender.com/mcp/ \
 cp .env.example .env
 # Edit .env and set:
 # TOGGL_API_TOKEN=your_token_here
-# TOGGL_WRITE_ENABLED=true  # Optional: enable write operations
 ```
 
 **Run Tests:**
@@ -530,4 +515,4 @@ curl -X POST http://localhost:8000/mcp/ \
 - **Protocol:** Model Context Protocol (MCP) via stdio
 - **API:** Toggl Track API v9 with configurable read/write access
 - **Authentication:** API token (Basic Auth)
-- **Security:** Environment-gated write operations
+- **Security:** API token permissions; create tools are not separately gated

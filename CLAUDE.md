@@ -178,6 +178,13 @@ Optional:
 - `MCP_API_KEY`: Authentication for HTTP mode
 - `LOG_LEVEL`: Logging level (default: INFO)
 
+There is **no write gate**. The create tools (`create_time_entry`, `create_project`,
+`create_client`, `add_project_user`) are always callable, bounded only by the API token's own
+permissions. A `TOGGL_WRITE_ENABLED` variable was documented from the start but never read by any
+code path, which meant the README promised a control that did not exist; it was removed rather
+than left misleading. Adding a real gate means implementing it in `server.py` and testing both
+states.
+
 ## Testing Requirements
 
 ### Mandatory Test Coverage
