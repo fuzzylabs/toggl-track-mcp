@@ -731,7 +731,12 @@ async def list_workspace_users() -> Dict[str, Any]:
         return {"error": str(e)}
 
 
-# Write Operations (Optional - Gated by Environment Variable)
+# Write Operations
+#
+# These are always available. There is no environment switch: a
+# TOGGL_WRITE_ENABLED variable was documented for a while but never read, so it
+# was removed from the docs rather than left as a control that does nothing. If
+# a gate is wanted, it has to be implemented here.
 
 
 @mcp.tool()
